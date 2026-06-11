@@ -3,40 +3,11 @@ import {
   Plus, X, FileText, Calendar, ChevronDown, ChevronUp,
   Search, Upload, File, FileImage, Paperclip, ChevronRight, Download,
 } from 'lucide-react'
+import { loadRelatorios, createRelatorio, deleteRelatorio, loadUsuarios } from '../../lib/api'
 
-const STORAGE_KEY   = 'rd_relatorios'
 const MAX_FILE_SIZE = 3 * 1024 * 1024 // 3 MB por arquivo
 
-function loadUsuarios() {
-  try { return JSON.parse(localStorage.getItem('cfg_usuarios') ?? '[]') } catch { return [] }
-}
-
-const DEMO = [
-  {
-    id: 'demo-1',
-    _demo: true,
-    titulo: 'Relatório Semana 23 — Design & Criativos',
-    responsavel: 'João Silva',
-    semana: '02/06 – 08/06/2025',
-    conteudo: `Demandas concluídas:\n• Criação de 4 artes para campanha de inverno (Meta Ads)\n• Revisão do banner principal do site\n• Identidade visual do novo produto finalizada\n\nEm andamento:\n• Pack de stories para semana 24 (50% concluído)\n• Adaptação das artes para Google Display\n\nPendências:\n• Aprovação do cliente nas peças de vídeo\n• Briefing da campanha de Dia dos Pais ainda não recebido\n\nObservações:\nSemana com alta demanda de revisões. Recomendo alinhar prazo de aprovação com o cliente para a próxima semana.`,
-    arquivos: [],
-    criadoEm: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-]
-
 /* ── helpers ────────────────────────────────────────────── */
-function loadRelatorios() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) return DEMO
-    const parsed = JSON.parse(stored)
-    return parsed.length > 0 ? parsed : DEMO
-  } catch { return DEMO }
-}
-function saveRelatorios(list) {
-  const real = list.filter(r => !r._demo)
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(real)) } catch { /* quota */ }
-}
 function initials(name) {
   return name.trim().split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 }
@@ -96,7 +67,6 @@ function UploadArea({ arquivos, onChange }) {
         Documentos anexos
       </label>
 
-      {/* Zona de drop */}
       <div
         className={`rd-upload${drag ? ' rd-upload--drag' : ''}`}
         onClick={() => inputRef.current?.click()}
@@ -119,7 +89,6 @@ function UploadArea({ arquivos, onChange }) {
         />
       </div>
 
-      {/* Lista de arquivos adicionados */}
       {arquivos.length > 0 && (
         <div className="rd-file-list">
           {arquivos.map((f, i) => {
@@ -148,11 +117,14 @@ function UploadArea({ arquivos, onChange }) {
 
 /* ── Modal de criação ─────────────────────────────────── */
 function NovoRelatorioModal({ onClose, onSave }) {
-  const usuarios = loadUsuarios()
+  const [usuarios, setUsuarios] = useState([])
+  const [saving,   setSaving]   = useState(false)
   const [form, setForm] = useState({
     titulo: '', responsavel: '', semana: '', conteudo: '', arquivos: [],
   })
   const [errors, setErrors] = useState({})
+
+  useEffect(() => { loadUsuarios().then(setUsuarios) }, [])
 
   function set(field, value) {
     setForm(f => ({ ...f, [field]: value }))
@@ -161,18 +133,23 @@ function NovoRelatorioModal({ onClose, onSave }) {
 
   function validate() {
     const e = {}
-    if (!form.titulo.trim())       e.titulo      = 'Campo obrigatório'
-    if (!form.responsavel)         e.responsavel = 'Selecione um responsável'
-    if (!form.semana.trim())       e.semana      = 'Campo obrigatório'
-    if (!form.conteudo.trim())     e.conteudo    = 'Campo obrigatório'
+    if (!form.titulo.trim())   e.titulo      = 'Campo obrigatório'
+    if (!form.responsavel)     e.responsavel = 'Selecione um responsável'
+    if (!form.semana.trim())   e.semana      = 'Campo obrigatório'
+    if (!form.conteudo.trim()) e.conteudo    = 'Campo obrigatório'
     setErrors(e)
     return Object.keys(e).length === 0
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     if (!validate()) return
-    onSave({ id: crypto.randomUUID(), ...form, criadoEm: new Date().toISOString() })
+    setSaving(true)
+    try {
+      await onSave({ ...form, criadoEm: new Date().toISOString() })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -194,7 +171,6 @@ function NovoRelatorioModal({ onClose, onSave }) {
 
         <form className="rd-modal__body" onSubmit={handleSubmit} noValidate>
 
-          {/* Linha: título + responsável */}
           <div className="rd-field-row">
             <div className="rd-field">
               <label className="rd-label">Título do relatório</label>
@@ -226,7 +202,6 @@ function NovoRelatorioModal({ onClose, onSave }) {
             </div>
           </div>
 
-          {/* Período */}
           <div className="rd-field">
             <label className="rd-label">Período / Semana</label>
             <div className="rd-input-wrap">
@@ -241,7 +216,6 @@ function NovoRelatorioModal({ onClose, onSave }) {
             {errors.semana && <span className="rd-error">{errors.semana}</span>}
           </div>
 
-          {/* Conteúdo */}
           <div className="rd-field">
             <label className="rd-label">Conteúdo do relatório</label>
             <textarea
@@ -254,7 +228,6 @@ function NovoRelatorioModal({ onClose, onSave }) {
             {errors.conteudo && <span className="rd-error">{errors.conteudo}</span>}
           </div>
 
-          {/* Upload */}
           <UploadArea
             arquivos={form.arquivos}
             onChange={files => setForm(f => ({ ...f, arquivos: files }))}
@@ -262,9 +235,9 @@ function NovoRelatorioModal({ onClose, onSave }) {
 
           <div className="rd-modal__footer">
             <button type="button" className="rd-btn-ghost" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="rd-btn-primary">
+            <button type="submit" className="rd-btn-primary" disabled={saving}>
               <Plus size={15} />
-              Salvar Relatório
+              {saving ? 'Salvando...' : 'Salvar Relatório'}
             </button>
           </div>
 
@@ -316,7 +289,6 @@ function RelatorioCard({ relatorio, onDelete }) {
         </button>
       )}
 
-      {/* Anexos */}
       {relatorio.arquivos?.length > 0 && (
         <div className="rd-card__attachments">
           <p className="rd-card__attach-label">
@@ -348,12 +320,11 @@ function RelatorioCard({ relatorio, onDelete }) {
 
 /* ── Export CSV ─────────────────────────────────────── */
 function exportCSV(lista) {
-  const reais = lista.filter(r => !r._demo)
-  if (reais.length === 0) { alert('Nenhum relatório real para exportar.'); return }
+  if (lista.length === 0) { alert('Nenhum relatório para exportar.'); return }
 
   const escape = v => `"${String(v ?? '').replace(/"/g, '""').replace(/\n/g, ' ')}"`
   const header = ['Título', 'Responsável', 'Semana', 'Data de criação', 'Conteúdo', 'Anexos']
-  const rows = reais.map(r => [
+  const rows = lista.map(r => [
     r.titulo,
     r.responsavel,
     r.semana,
@@ -377,19 +348,23 @@ function exportCSV(lista) {
 
 /* ── Componente principal ────────────────────────────── */
 export default function RelatoriosDemandas() {
-  const [relatorios, setRelatorios] = useState(loadRelatorios)
+  const [relatorios, setRelatorios] = useState([])
   const [showModal,  setShowModal]  = useState(false)
   const [filtro,     setFiltro]     = useState('todos')
   const [busca,      setBusca]      = useState('')
 
-  useEffect(() => { saveRelatorios(relatorios) }, [relatorios])
+  useEffect(() => {
+    loadRelatorios().then(setRelatorios)
+  }, [])
 
-  function handleSave(novo) {
-    setRelatorios(prev => [novo, ...prev])
+  async function handleSave(novo) {
+    const saved = await createRelatorio(novo)
+    setRelatorios(prev => [saved, ...prev])
     setShowModal(false)
   }
 
-  function handleDelete(id) {
+  async function handleDelete(id) {
+    await deleteRelatorio(id)
     setRelatorios(prev => prev.filter(r => r.id !== id))
   }
 
@@ -404,8 +379,6 @@ export default function RelatoriosDemandas() {
     return matchFiltro && matchBusca
   })
 
-  const temReais = relatorios.some(r => !r._demo)
-
   return (
     <div className="rd">
 
@@ -415,7 +388,7 @@ export default function RelatoriosDemandas() {
           <h2 className="cc-title">Relatórios Semanais</h2>
         </div>
         <div className="rd-header-actions">
-          {temReais && (
+          {relatorios.length > 0 && (
             <button className="rd-btn-ghost" onClick={() => exportCSV(relatorios)}>
               <Download size={15} /> Exportar CSV
             </button>

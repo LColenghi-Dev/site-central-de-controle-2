@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import {
@@ -6,6 +6,8 @@ import {
   Bell, Settings, LogOut, ChevronRight, Menu,
 } from 'lucide-react'
 import logo from '../../assets/imagens/logo-marazul.svg'
+// MUDANÇA 1: importa o loadPerfil do api.js
+import { loadPerfil } from '../../lib/api'
 import VisaoGeral            from './VisaoGeral'
 import TrafegoPago           from './TrafegoPago'
 import Projetos              from './Projetos'
@@ -36,15 +38,9 @@ const periodoAtual = new Date()
   .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
   .replace(/^\w/, c => c.toUpperCase())
 
-/* Iniciais do perfil salvo */
-function getAvatarInitials() {
-  try {
-    const perfil = JSON.parse(localStorage.getItem('cfg_perfil') ?? 'null')
-    if (perfil?.nome) {
-      return perfil.nome.trim().split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
-    }
-  } catch {}
-  return 'LF'
+// MUDANÇA 2: a função não lê mais o storage — só transforma nome em iniciais.
+function initialsFromNome(nome) {
+  return nome.trim().split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 }
 
 export default function Dashboard() {
@@ -57,7 +53,16 @@ export default function Dashboard() {
     () => loadNotifs().filter(n => !n.read).length
   )
 
-  const avatarInitials = getAvatarInitials()
+  // MUDANÇA 3: padrão de 3 linhas — avatar nasce com 'LF', carrega via api.
+  // Dependência [active]: recarrega ao trocar de aba, então se o usuário
+  // editar o perfil em Configurações, o avatar atualiza ao sair de lá.
+  const [avatarInitials, setAvatarInitials] = useState('LF')
+
+  useEffect(() => {
+    loadPerfil().then(p => {
+      setAvatarInitials(p?.nome ? initialsFromNome(p.nome) : 'LF')
+    })
+  }, [active])
 
   function logout() {
     signOut()

@@ -19,17 +19,23 @@ export default function Login() {
   const [errorMsg, setErrorMsg] = useState('')
   const [loading, setLoading] = useState(false)
 
-  function handleSubmit(e) {
-    e.preventDefault()
-    setErrorMsg('')
-    setLoading(true)
+  async function handleSubmit(e) {
+  e.preventDefault()
+  setErrorMsg('')
+  setLoading(true)
 
-    const form = e.currentTarget
-    const email = form.querySelector('#email').value
+  const form = e.currentTarget
+  const email = form.querySelector('#email').value
+  const password = form.querySelector('#password').value
 
-    signIn(email)
+  try {
+    await signIn(email, password)
     navigate('/dashboard')
+  } catch {
+    setErrorMsg('E-mail ou senha incorretos.')
+    setLoading(false)
   }
+}
 
   return (
     <div className="login">

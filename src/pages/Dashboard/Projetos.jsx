@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ExternalLink, Palette, Video, Calendar, Layers,
   BarChart2, ChevronDown, TrendingUp, Handshake,
 } from 'lucide-react'
+// MUDANÇA 1: importa as funções de leitura do api.js
+import { loadEquipes, loadUsuarios } from '../../lib/api'
 
 const CLICKUP_WORKSPACE = 'https://app.clickup.com'
 const CLICKUP_DESIGN    = 'https://app.clickup.com/9007154660/v/l/8cdwhf4-13093'
@@ -23,7 +25,10 @@ const EQUIPES_DEF = [
   { key: 'crm',     label: 'CRM',              Icon: Handshake,  color: 'green'  },
 ]
 
+const EQUIPES_VAZIO = { design: [], video: [], trafego: [], crm: [] }
+
 /* ── Métricas demo por equipe ─────────────────────────────── */
+/* TODO Fase 2: substituir por dados reais (ClickUp via tabela no Supabase) */
 const PROD_EQUIPES = {
   todos:   { concluidas: 54, andamento: 11, pendentes: 10 },
   design:  { concluidas: 18, andamento:  5, pendentes:  3 },
@@ -34,9 +39,7 @@ const PROD_EQUIPES = {
 
 const PERSON_FACTORS = [0.40, 0.30, 0.18, 0.12]
 
-function loadStorage(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback } catch { return fallback }
-}
+// MUDANÇA 2: o helper loadStorage() foi DELETADO — o api.js faz esse papel.
 
 function getMetrics(equipeKey, pessoaId, usuarios) {
   const base = PROD_EQUIPES[equipeKey] ?? PROD_EQUIPES.todos
@@ -57,12 +60,19 @@ function pct(part, total) {
 
 /* ── Card de Produtividade ──────────────────────────────────── */
 function CardProdutividade() {
-  const [equipe,  setEquipe]  = useState('todos')
+  const [equipe,   setEquipe]   = useState('todos')
   const [pessoaId, setPessoaId] = useState('todos')
 
-  /* Carrega dados do localStorage (atualiza a cada render para pegar mudanças em Configurações) */
-  const equipes  = loadStorage('cfg_equipes',  { design: [], video: [], trafego: [], crm: [] })
-  const usuarios = loadStorage('cfg_usuarios', [])
+  // MUDANÇA 3: leitura síncrona a cada render virou estado + useEffect.
+  // Esta tela só LÊ — não salva nada — então não precisa da flag
+  // "carregado" (ela só existe para proteger SAVES automáticos).
+  const [equipes,  setEquipes]  = useState(EQUIPES_VAZIO)
+  const [usuarios, setUsuarios] = useState([])
+
+  useEffect(() => {
+    loadEquipes().then(v => setEquipes(v ?? EQUIPES_VAZIO))
+    loadUsuarios().then(setUsuarios)
+  }, [])
 
   /* Membros da equipe selecionada (ou todos se "todos") */
   const membrosEquipe = equipe === 'todos'

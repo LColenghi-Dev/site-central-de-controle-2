@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react'
 import {
-  Plus, User, Link, UserCircle, Save, Check, Trash2,
+  User, Link, UserCircle, Save, Check,
   Sun, Moon, Key, Copy, RefreshCw, Eye, EyeOff, ShieldCheck,
   Users, Palette, Video, TrendingUp, Handshake, X,
 } from 'lucide-react'
+import {
+  loadUsuarios, saveUsuarios,
+  loadEquipes, saveEquipes,
+  loadIntegracoes, saveIntegracoes,
+  loadPerfil, savePerfil,
+  loadApiKey, saveApiKey,
+} from '../../lib/api'
 
-const KEY_USUARIOS    = 'cfg_usuarios'
-const KEY_EQUIPES     = 'cfg_equipes'
-const KEY_INTEGRACOES = 'cfg_integracoes'
-const KEY_PERFIL      = 'cfg_perfil'
-const KEY_TEMA        = 'cfg_tema'
-const KEY_APIKEY      = 'cfg_api_key'
+const KEY_TEMA = 'cfg_tema'
 
 const EQUIPES_DEF = [
   { key: 'design',  label: 'Design',          Icon: Palette,    color: 'violet' },
@@ -21,16 +23,11 @@ const EQUIPES_DEF = [
 
 const EQUIPES_VAZIO = { design: [], video: [], trafego: [], crm: [] }
 
-function load(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback }
-  catch { return fallback }
-}
-function save(key, value) {
-  localStorage.setItem(key, JSON.stringify(value))
-}
 function initials(name) {
+  if (!name?.trim()) return '??'
   return name.trim().split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 }
+
 function generateKey() {
   const bytes = new Uint8Array(32)
   crypto.getRandomValues(bytes)
@@ -38,7 +35,7 @@ function generateKey() {
   return `mzl_live_${hex}`
 }
 
-/* ── Seção: Aparência ─────────────────────────────────── */
+/* ── Aparência — tema fica no localStorage (intencional) ── */
 function SecaoAparencia() {
   const [tema, setTema] = useState(() => localStorage.getItem(KEY_TEMA) ?? 'dark')
 
@@ -103,19 +100,27 @@ function SecaoAparencia() {
   )
 }
 
-/* ── Seção: API Key ───────────────────────────────────── */
+/* ── API Key ── */
 function SecaoApiKey() {
-  const [apiKey,   setApiKey]   = useState(() => localStorage.getItem(KEY_APIKEY) ?? '')
-  const [visible,  setVisible]  = useState(false)
-  const [copied,   setCopied]   = useState(false)
-  const [confirm,  setConfirm]  = useState(false)
+  const [apiKey,  setApiKey]  = useState('')
+  const [visible, setVisible] = useState(false)
+  const [copied,  setCopied]  = useState(false)
+  const [confirm, setConfirm] = useState(false)
+  const [saving,  setSaving]  = useState(false)
 
-  function criarKey() {
+  useEffect(() => { loadApiKey().then(setApiKey) }, [])
+
+  async function criarKey() {
     const nova = generateKey()
-    setApiKey(nova)
-    localStorage.setItem(KEY_APIKEY, nova)
-    setVisible(true)
-    setConfirm(false)
+    setSaving(true)
+    try {
+      await saveApiKey(nova)
+      setApiKey(nova)
+      setVisible(true)
+      setConfirm(false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   function copiar() {
@@ -144,7 +149,6 @@ function SecaoApiKey() {
 
       {apiKey ? (
         <>
-          {/* Key display */}
           <div className="cfg-key-box">
             <Key size={14} className="cfg-key-box__icon" />
             <code className="cfg-key-box__value">{displayKey}</code>
@@ -160,7 +164,6 @@ function SecaoApiKey() {
             </button>
           </div>
 
-          {/* Info de uso */}
           <div className="cfg-key-usage">
             <p className="cfg-key-usage__title">Como usar na automação:</p>
             <code className="cfg-key-usage__code">
@@ -171,22 +174,19 @@ function SecaoApiKey() {
             </p>
           </div>
 
-          {/* Regenerar */}
           {!confirm ? (
-            <button className="cfg-regen-btn" onClick={() => setConfirm(true)}>
+            <button className="cfg-regen-btn" onClick={() => setConfirm(true)} disabled={saving}>
               <RefreshCw size={14} /> Regenerar chave
             </button>
           ) : (
             <div className="cfg-confirm">
-              <p className="cfg-confirm__text">
-                A chave atual será invalidada. Tem certeza?
-              </p>
+              <p className="cfg-confirm__text">A chave atual será invalidada. Tem certeza?</p>
               <div className="cfg-confirm__actions">
                 <button className="rd-btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={() => setConfirm(false)}>
                   Cancelar
                 </button>
-                <button className="cfg-regen-btn cfg-regen-btn--danger" onClick={criarKey}>
-                  <RefreshCw size={14} /> Sim, regenerar
+                <button className="cfg-regen-btn cfg-regen-btn--danger" onClick={criarKey} disabled={saving}>
+                  <RefreshCw size={14} /> {saving ? 'Salvando...' : 'Sim, regenerar'}
                 </button>
               </div>
             </div>
@@ -197,8 +197,8 @@ function SecaoApiKey() {
           <Key size={22} className="cfg-key-empty__icon" />
           <p className="cfg-key-empty__text">Nenhuma API Key gerada ainda.</p>
           <p className="cfg-key-empty__sub">Gere uma chave para conectar automações externas a este dashboard.</p>
-          <button className="rd-btn-primary" onClick={criarKey}>
-            <Key size={15} /> Gerar API Key
+          <button className="rd-btn-primary" onClick={criarKey} disabled={saving}>
+            <Key size={15} /> {saving ? 'Gerando...' : 'Gerar API Key'}
           </button>
         </div>
       )}
@@ -206,20 +206,32 @@ function SecaoApiKey() {
   )
 }
 
-/* ── Seção: Usuários ──────────────────────────────────── */
+/* ── Usuários — exibe profiles do Supabase Auth ── */
 function SecaoUsuarios() {
-  const [usuarios, setUsuarios] = useState(() => load(KEY_USUARIOS, []))
-  const [nome,     setNome]     = useState('')
-  const [cargo,    setCargo]    = useState('')
-  const [erro,     setErro]     = useState('')
+  const [usuarios, setUsuarios] = useState([])
+  const [editando, setEditando] = useState(null)
+  const [form,     setForm]     = useState({ nome: '', cargo: '' })
+  const [saving,   setSaving]   = useState(false)
 
-  useEffect(() => { save(KEY_USUARIOS, usuarios) }, [usuarios])
+  useEffect(() => { loadUsuarios().then(setUsuarios) }, [])
 
-  function adicionar(e) {
-    e.preventDefault()
-    if (!nome.trim()) { setErro('Informe o nome'); return }
-    setUsuarios(prev => [...prev, { id: crypto.randomUUID(), nome: nome.trim(), cargo: cargo.trim() }])
-    setNome(''); setCargo(''); setErro('')
+  function startEdit(u) {
+    setEditando(u.id)
+    setForm({ nome: u.nome ?? '', cargo: u.cargo ?? '' })
+  }
+
+  async function salvarEdicao() {
+    setSaving(true)
+    try {
+      const updated = usuarios.map(u =>
+        u.id === editando ? { ...u, nome: form.nome, cargo: form.cargo } : u
+      )
+      await saveUsuarios(updated)
+      setUsuarios(updated)
+      setEditando(null)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -230,51 +242,61 @@ function SecaoUsuarios() {
         </div>
         <div>
           <h3 className="cfg-section__title">Usuários da Equipe</h3>
-          <p className="cfg-section__desc">Membros que aparecem no dropdown de Responsável nos relatórios.</p>
+          <p className="cfg-section__desc">
+            Membros com acesso ao dashboard. Para adicionar novos, crie usuários no painel do Supabase (Authentication → Users).
+          </p>
         </div>
       </div>
 
-      <form className="cfg-add-form" onSubmit={adicionar}>
-        <div className="cfg-add-form__fields">
-          <div className="rd-field" style={{ flex: 2 }}>
-            <label className="rd-label">Nome completo</label>
-            <input
-              className={`rd-input${erro ? ' rd-input--error' : ''}`}
-              placeholder="Ex: João Silva"
-              value={nome}
-              onChange={e => { setNome(e.target.value); setErro('') }}
-            />
-            {erro && <span className="rd-error">{erro}</span>}
-          </div>
-          <div className="rd-field" style={{ flex: 1.2 }}>
-            <label className="rd-label">Cargo (opcional)</label>
-            <input
-              className="rd-input"
-              placeholder="Ex: Designer"
-              value={cargo}
-              onChange={e => setCargo(e.target.value)}
-            />
-          </div>
-        </div>
-        <button type="submit" className="rd-btn-primary cfg-add-form__btn">
-          <Plus size={15} /> Adicionar
-        </button>
-      </form>
-
       {usuarios.length === 0 ? (
-        <p className="cfg-empty">Nenhum usuário cadastrado ainda.</p>
+        <p className="cfg-empty">Nenhum usuário encontrado.</p>
       ) : (
         <div className="cfg-user-list">
           {usuarios.map(u => (
             <div key={u.id} className="cfg-user-item">
-              <div className="cfg-user-item__avatar">{initials(u.nome)}</div>
-              <div className="cfg-user-item__info">
-                <p className="cfg-user-item__nome">{u.nome}</p>
-                {u.cargo && <p className="cfg-user-item__cargo">{u.cargo}</p>}
-              </div>
-              <button className="cfg-user-item__del" onClick={() => setUsuarios(p => p.filter(x => x.id !== u.id))} title="Remover">
-                <Trash2 size={14} />
-              </button>
+              {editando === u.id ? (
+                <>
+                  <div className="cfg-user-item__avatar">{initials(form.nome || u.email)}</div>
+                  <div className="cfg-user-item__info" style={{ flex: 1, display: 'flex', gap: 8 }}>
+                    <input
+                      className="rd-input"
+                      style={{ height: 32, fontSize: 13 }}
+                      value={form.nome}
+                      onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
+                      placeholder="Nome"
+                    />
+                    <input
+                      className="rd-input"
+                      style={{ height: 32, fontSize: 13 }}
+                      value={form.cargo}
+                      onChange={e => setForm(f => ({ ...f, cargo: e.target.value }))}
+                      placeholder="Cargo"
+                    />
+                  </div>
+                  <button className="cfg-save-btn" onClick={salvarEdicao} disabled={saving} style={{ height: 32 }}>
+                    {saving ? <RefreshCw size={13} /> : <Check size={13} />}
+                  </button>
+                  <button className="cfg-user-item__del" onClick={() => setEditando(null)}>
+                    <X size={14} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="cfg-user-item__avatar">{initials(u.nome || u.email)}</div>
+                  <div className="cfg-user-item__info">
+                    <p className="cfg-user-item__nome">{u.nome || u.email}</p>
+                    {u.cargo && <p className="cfg-user-item__cargo">{u.cargo}</p>}
+                  </div>
+                  <button
+                    className="cfg-user-item__del"
+                    onClick={() => startEdit(u)}
+                    title="Editar"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    <Save size={14} />
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -283,133 +305,28 @@ function SecaoUsuarios() {
   )
 }
 
-/* ── Seção: Integrações ───────────────────────────────── */
-function SecaoIntegracoes() {
-  const [form,  setForm]  = useState(() => load(KEY_INTEGRACOES, { n8nUrl: '', trafficUrl: '', clickupUrl: '' }))
-  const [saved, setSaved] = useState(false)
-
-  function set(field, value) { setForm(f => ({ ...f, [field]: value })); setSaved(false) }
-
-  function handleSave(e) {
-    e.preventDefault()
-    save(KEY_INTEGRACOES, form)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
-  }
-
-  const FIELDS = [
-    { field: 'n8nUrl',     label: 'n8n Workspace URL',          placeholder: 'https://n8n.suaagencia.com.br'  },
-    { field: 'trafficUrl', label: 'Dashboard de Tráfego (URL)', placeholder: 'https://api.suaagencia.com.br'  },
-    { field: 'clickupUrl', label: 'ClickUp Workspace URL',      placeholder: 'https://app.clickup.com/...'   },
-  ]
-
-  return (
-    <div className="cfg-section">
-      <div className="cfg-section__head">
-        <div className="cfg-section__icon cfg-section__icon--violet">
-          <Link size={17} />
-        </div>
-        <div>
-          <h3 className="cfg-section__title">Integrações</h3>
-          <p className="cfg-section__desc">URLs das ferramentas externas usadas no dashboard.</p>
-        </div>
-      </div>
-
-      <form className="cfg-form" onSubmit={handleSave}>
-        {FIELDS.map(({ field, label, placeholder }) => (
-          <div className="rd-field" key={field}>
-            <label className="rd-label">{label}</label>
-            <input className="rd-input" placeholder={placeholder} value={form[field]} onChange={e => set(field, e.target.value)} />
-          </div>
-        ))}
-        <div className="cfg-form__footer">
-          <button type="submit" className={`cfg-save-btn${saved ? ' cfg-save-btn--saved' : ''}`}>
-            {saved ? <><Check size={15} /> Salvo!</> : <><Save size={15} /> Salvar</>}
-          </button>
-        </div>
-      </form>
-    </div>
-  )
-}
-
-/* ── Seção: Perfil ────────────────────────────────────── */
-function SecaoPerfil() {
-  const [form,  setForm]  = useState(() => load(KEY_PERFIL, { nome: '', email: '' }))
-  const [saved, setSaved] = useState(false)
-
-  function set(field, value) { setForm(f => ({ ...f, [field]: value })); setSaved(false) }
-
-  function handleSave(e) {
-    e.preventDefault()
-    save(KEY_PERFIL, form)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
-  }
-
-  return (
-    <div className="cfg-section">
-      <div className="cfg-section__head">
-        <div className="cfg-section__icon cfg-section__icon--green">
-          <UserCircle size={17} />
-        </div>
-        <div>
-          <h3 className="cfg-section__title">Perfil</h3>
-          <p className="cfg-section__desc">Suas informações exibidas no dashboard.</p>
-        </div>
-      </div>
-
-      <form className="cfg-form" onSubmit={handleSave}>
-        <div className="cfg-profile-row">
-          <div className="cfg-avatar-preview">
-            {form.nome ? initials(form.nome) : 'LF'}
-          </div>
-          <div className="cfg-form cfg-form--inline">
-            <div className="rd-field">
-              <label className="rd-label">Nome</label>
-              <input className="rd-input" placeholder="Seu nome completo" value={form.nome} onChange={e => set('nome', e.target.value)} />
-            </div>
-            <div className="rd-field">
-              <label className="rd-label">E-mail</label>
-              <input className="rd-input" placeholder="seu@email.com" type="email" value={form.email} onChange={e => set('email', e.target.value)} />
-            </div>
-          </div>
-        </div>
-        <div className="cfg-form__footer">
-          <button type="submit" className={`cfg-save-btn${saved ? ' cfg-save-btn--saved' : ''}`}>
-            {saved ? <><Check size={15} /> Salvo!</> : <><Save size={15} /> Salvar</>}
-          </button>
-        </div>
-      </form>
-    </div>
-  )
-}
-
-/* ── Seção: Equipes ───────────────────────────────────── */
+/* ── Equipes ── */
 function SecaoEquipes() {
-  const [equipes,  setEquipes]  = useState(() => load(KEY_EQUIPES,  EQUIPES_VAZIO))
-  const [usuarios, setUsuarios] = useState(() => load(KEY_USUARIOS, []))
+  const [equipes,  setEquipes]  = useState(EQUIPES_VAZIO)
+  const [usuarios, setUsuarios] = useState([])
 
-  // Sincroniza usuários caso sejam atualizados na seção acima
   useEffect(() => {
-    const handler = () => setUsuarios(load(KEY_USUARIOS, []))
-    window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
+    loadEquipes().then(data =>
+      setEquipes(data && typeof data === 'object' ? { ...EQUIPES_VAZIO, ...data } : EQUIPES_VAZIO)
+    )
+    loadUsuarios().then(setUsuarios)
   }, [])
 
-  function addMember(equipeKey, userId) {
-    setEquipes(prev => {
-      const next = { ...prev, [equipeKey]: [...(prev[equipeKey] ?? []), userId] }
-      save(KEY_EQUIPES, next)
-      return next
-    })
+  async function addMember(equipeKey, userId) {
+    const next = { ...equipes, [equipeKey]: [...(equipes[equipeKey] ?? []), userId] }
+    setEquipes(next)
+    await saveEquipes(next)
   }
 
-  function removeMember(equipeKey, userId) {
-    setEquipes(prev => {
-      const next = { ...prev, [equipeKey]: (prev[equipeKey] ?? []).filter(id => id !== userId) }
-      save(KEY_EQUIPES, next)
-      return next
-    })
+  async function removeMember(equipeKey, userId) {
+    const next = { ...equipes, [equipeKey]: (equipes[equipeKey] ?? []).filter(id => id !== userId) }
+    setEquipes(next)
+    await saveEquipes(next)
   }
 
   return (
@@ -425,7 +342,7 @@ function SecaoEquipes() {
       </div>
 
       {usuarios.length === 0 ? (
-        <p className="cfg-empty">Cadastre usuários na seção acima para organizá-los em equipes.</p>
+        <p className="cfg-empty">Nenhum usuário cadastrado ainda.</p>
       ) : (
         <div className="cfg-equipes-grid">
           {EQUIPES_DEF.map(({ key, label, Icon, color }) => {
@@ -435,7 +352,6 @@ function SecaoEquipes() {
 
             return (
               <div key={key} className={`cfg-equipe-card cfg-equipe-card--${color}`}>
-
                 <div className="cfg-equipe-card__head">
                   <div className={`cfg-equipe-card__icon cfg-equipe-card__icon--${color}`}>
                     <Icon size={15} />
@@ -452,9 +368,9 @@ function SecaoEquipes() {
                   ) : (
                     members.map(u => (
                       <div key={u.id} className="cfg-equipe-member">
-                        <div className="cfg-equipe-member__avatar">{initials(u.nome)}</div>
+                        <div className="cfg-equipe-member__avatar">{initials(u.nome || u.email)}</div>
                         <div className="cfg-equipe-member__info">
-                          <span className="cfg-equipe-member__nome">{u.nome}</span>
+                          <span className="cfg-equipe-member__nome">{u.nome || u.email}</span>
                           {u.cargo && <span className="cfg-equipe-member__cargo">{u.cargo}</span>}
                         </div>
                         <button
@@ -477,7 +393,7 @@ function SecaoEquipes() {
                   >
                     <option value="">+ Adicionar membro</option>
                     {available.map(u => (
-                      <option key={u.id} value={u.id}>{u.nome}</option>
+                      <option key={u.id} value={u.id}>{u.nome || u.email}</option>
                     ))}
                   </select>
                 )}
@@ -490,7 +406,149 @@ function SecaoEquipes() {
   )
 }
 
-/* ── Componente principal ─────────────────────────────── */
+/* ── Integrações ── */
+function SecaoIntegracoes() {
+  const [form,   setForm]   = useState({ n8nUrl: '', trafficUrl: '', clickupUrl: '' })
+  const [saved,  setSaved]  = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    loadIntegracoes().then(data => {
+      if (data) setForm(f => ({ ...f, ...data }))
+    })
+  }, [])
+
+  function set(field, value) { setForm(f => ({ ...f, [field]: value })); setSaved(false) }
+
+  async function handleSave(e) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await saveIntegracoes(form)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const FIELDS = [
+    { field: 'n8nUrl',     label: 'n8n Workspace URL',          placeholder: 'https://n8n.suaagencia.com.br' },
+    { field: 'trafficUrl', label: 'Dashboard de Tráfego (URL)', placeholder: 'https://api.suaagencia.com.br' },
+    { field: 'clickupUrl', label: 'ClickUp Workspace URL',      placeholder: 'https://app.clickup.com/...'  },
+  ]
+
+  return (
+    <div className="cfg-section">
+      <div className="cfg-section__head">
+        <div className="cfg-section__icon cfg-section__icon--violet">
+          <Link size={17} />
+        </div>
+        <div>
+          <h3 className="cfg-section__title">Integrações</h3>
+          <p className="cfg-section__desc">URLs das ferramentas externas usadas no dashboard.</p>
+        </div>
+      </div>
+
+      <form className="cfg-form" onSubmit={handleSave}>
+        {FIELDS.map(({ field, label, placeholder }) => (
+          <div className="rd-field" key={field}>
+            <label className="rd-label">{label}</label>
+            <input
+              className="rd-input"
+              placeholder={placeholder}
+              value={form[field]}
+              onChange={e => set(field, e.target.value)}
+            />
+          </div>
+        ))}
+        <div className="cfg-form__footer">
+          <button type="submit" className={`cfg-save-btn${saved ? ' cfg-save-btn--saved' : ''}`} disabled={saving}>
+            {saved ? <><Check size={15} /> Salvo!</> : <><Save size={15} /> {saving ? 'Salvando...' : 'Salvar'}</>}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+/* ── Perfil ── */
+function SecaoPerfil() {
+  const [form,   setForm]   = useState({ nome: '', email: '', cargo: '' })
+  const [saved,  setSaved]  = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    loadPerfil().then(data => {
+      if (data) setForm({ nome: data.nome ?? '', email: data.email ?? '', cargo: data.cargo ?? '' })
+    })
+  }, [])
+
+  function set(field, value) { setForm(f => ({ ...f, [field]: value })); setSaved(false) }
+
+  async function handleSave(e) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await savePerfil(form)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="cfg-section">
+      <div className="cfg-section__head">
+        <div className="cfg-section__icon cfg-section__icon--green">
+          <UserCircle size={17} />
+        </div>
+        <div>
+          <h3 className="cfg-section__title">Perfil</h3>
+          <p className="cfg-section__desc">Suas informações exibidas no dashboard.</p>
+        </div>
+      </div>
+
+      <form className="cfg-form" onSubmit={handleSave}>
+        <div className="cfg-profile-row">
+          <div className="cfg-avatar-preview">
+            {initials(form.nome || form.email)}
+          </div>
+          <div className="cfg-form cfg-form--inline">
+            <div className="rd-field">
+              <label className="rd-label">Nome</label>
+              <input
+                className="rd-input"
+                placeholder="Seu nome completo"
+                value={form.nome}
+                onChange={e => set('nome', e.target.value)}
+              />
+            </div>
+            <div className="rd-field">
+              <label className="rd-label">E-mail</label>
+              <input
+                className="rd-input"
+                placeholder="seu@email.com"
+                type="email"
+                value={form.email}
+                readOnly
+                style={{ opacity: 0.6, cursor: 'not-allowed' }}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="cfg-form__footer">
+          <button type="submit" className={`cfg-save-btn${saved ? ' cfg-save-btn--saved' : ''}`} disabled={saving}>
+            {saved ? <><Check size={15} /> Salvo!</> : <><Save size={15} /> {saving ? 'Salvando...' : 'Salvar'}</>}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+/* ── Principal ── */
 export default function Configuracoes() {
   return (
     <div className="cfg">
