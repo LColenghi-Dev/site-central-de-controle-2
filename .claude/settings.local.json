@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf /Users/felipecolenghi/Downloads/site-central-de-controle-master/api /Users/felipecolenghi/Downloads/site-central-de-controle-master/api-example)",
+      "Bash(npm install *)",
+      "Bash(npm run *)"
+    ],
+    "additionalDirectories": [
+      "/Users/felipecolenghi/Downloads/site-central-de-controle-master/api"
+    ]
+  }
+}
