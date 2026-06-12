@@ -11,10 +11,16 @@ export async function loadRelatorios() {
 }
 
 export async function createRelatorio(relatorio) {
-  const { criadoEm, ...campos } = relatorio
+  const { criadoEm, arquivos = [], ...campos } = relatorio
+  const relatorioId = crypto.randomUUID()
+
+  const arquivosUpload = await Promise.all(
+    arquivos.map(f => f.rawFile ? uploadAnexo(f.rawFile, relatorioId) : Promise.resolve(f))
+  )
+
   const { data, error } = await supabase
     .from('reports')
-    .insert(campos)
+    .insert({ id: relatorioId, ...campos, arquivos: arquivosUpload })
     .select()
     .single()
   if (error) throw error
@@ -22,6 +28,9 @@ export async function createRelatorio(relatorio) {
 }
 
 export async function deleteRelatorio(id) {
+  const { data } = await supabase.from('reports').select('arquivos').eq('id', id).single()
+  const paths = (data?.arquivos ?? []).map(a => a.path).filter(Boolean)
+  if (paths.length) await supabase.storage.from('relatorios').remove(paths)
   const { error } = await supabase.from('reports').delete().eq('id', id)
   if (error) throw error
 }
@@ -106,6 +115,38 @@ export async function saveIntegracoes(integracoes) {
   if (error) throw error
 }
 
-// ── Projetos (Fase 4) ─────────────────────────────────────
-export async function loadProjetos() { return [] }
-export async function saveProjetos() {}
+// ── Storage (Fase 3) ──────────────────────────────────────
+export async function uploadAnexo(file, relatorioId) {
+  const ext = file.name.split('.').pop()
+  const path = `${relatorioId}/${crypto.randomUUID()}.${ext}`
+  const { data, error } = await supabase.storage
+    .from('relatorios')
+    .upload(path, file)
+  if (error) throw error
+  return { name: file.name, size: file.size, type: file.type, path: data.path }
+}
+
+export async function getAnexoUrl(path) {
+  const { data, error } = await supabase.storage
+    .from('relatorios')
+    .createSignedUrl(path, 3600)
+  if (error) throw error
+  return data.signedUrl
+}
+// ── Metricas (Fase 4) ─────────────────────────────────────
+export async function loadMetricas() {
+  const { data, error } = await supabase
+    .from('metricas').select('*').order('data', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+export async function createMetrica(m) {
+  const { data, error } = await supabase
+    .from('metricas').insert(m).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteMetrica(id) {
+  const { error } = await supabase.from('metricas').delete().eq('id', id)
+  if (error) throw error
+}

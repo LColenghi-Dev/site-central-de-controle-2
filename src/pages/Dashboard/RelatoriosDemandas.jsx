@@ -3,7 +3,7 @@ import {
   Plus, X, FileText, Calendar, ChevronDown, ChevronUp,
   Search, Upload, File, FileImage, Paperclip, ChevronRight, Download,
 } from 'lucide-react'
-import { loadRelatorios, createRelatorio, deleteRelatorio, loadUsuarios } from '../../lib/api'
+import { loadRelatorios, createRelatorio, deleteRelatorio, loadUsuarios, getAnexoUrl } from '../../lib/api'
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024 // 3 MB por arquivo
 
@@ -23,18 +23,10 @@ function fileIcon(type) {
   if (type.startsWith('image/')) return FileImage
   return File
 }
-function readAsBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload  = () => resolve(reader.result)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
 
 /* ── Área de upload ─────────────────────────────────────── */
 function UploadArea({ arquivos, onChange }) {
-  const inputRef  = useRef(null)
+  const inputRef = useRef(null)
   const [drag, setDrag] = useState(false)
 
   async function processFiles(fileList) {
@@ -44,8 +36,7 @@ function UploadArea({ arquivos, onChange }) {
         alert(`"${file.name}" excede 3 MB e não foi adicionado.`)
         continue
       }
-      const data = await readAsBase64(file)
-      novos.push({ name: file.name, size: file.size, type: file.type, data })
+      novos.push({ name: file.name, size: file.size, type: file.type, rawFile: file })
     }
     onChange([...arquivos, ...novos])
   }
@@ -247,6 +238,34 @@ function NovoRelatorioModal({ onClose, onSave }) {
   )
 }
 
+/* ── Anexo individual (suporta Storage e base64 legado) ── */
+function AnexoItem({ arquivo }) {
+  const [url, setUrl] = useState(arquivo.data ?? null)
+  const Icon = fileIcon(arquivo.type)
+
+  useEffect(() => {
+    if (!arquivo.data && arquivo.path) {
+      getAnexoUrl(arquivo.path).then(setUrl).catch(() => setUrl(null))
+    }
+  }, [arquivo])
+
+  if (!url) return (
+    <div className="rd-attach-item">
+      <Icon size={13} className="rd-attach-item__icon" />
+      <span className="rd-attach-item__name">{arquivo.name}</span>
+      <span className="rd-attach-item__size">{fmtSize(arquivo.size)}</span>
+    </div>
+  )
+
+  return (
+    <a href={url} download={arquivo.name} className="rd-attach-item" title={`Baixar ${arquivo.name}`}>
+      <Icon size={13} className="rd-attach-item__icon" />
+      <span className="rd-attach-item__name">{arquivo.name}</span>
+      <span className="rd-attach-item__size">{fmtSize(arquivo.size)}</span>
+    </a>
+  )
+}
+
 /* ── Card de relatório ───────────────────────────────── */
 function RelatorioCard({ relatorio, onDelete }) {
   const [expanded, setExpanded] = useState(false)
@@ -295,22 +314,9 @@ function RelatorioCard({ relatorio, onDelete }) {
             <Paperclip size={11} /> {relatorio.arquivos.length} anexo{relatorio.arquivos.length !== 1 ? 's' : ''}
           </p>
           <div className="rd-attach-list">
-            {relatorio.arquivos.map((f, i) => {
-              const Icon = fileIcon(f.type)
-              return (
-                <a
-                  key={i}
-                  href={f.data}
-                  download={f.name}
-                  className="rd-attach-item"
-                  title={`Baixar ${f.name}`}
-                >
-                  <Icon size={13} className="rd-attach-item__icon" />
-                  <span className="rd-attach-item__name">{f.name}</span>
-                  <span className="rd-attach-item__size">{fmtSize(f.size)}</span>
-                </a>
-              )
-            })}
+            {relatorio.arquivos.map((f, i) => (
+              <AnexoItem key={i} arquivo={f} />
+            ))}
           </div>
         </div>
       )}
