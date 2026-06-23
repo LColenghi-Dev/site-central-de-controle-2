@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  ExternalLink, Palette, Video, Calendar, Layers,
-  BarChart2, ChevronDown, TrendingUp, Handshake,
+  AlertCircle, BarChart2, Calendar, CheckCircle2, Clock3,
+  ExternalLink, History, Layers, Palette, RefreshCw, Video, X,
 } from 'lucide-react'
-// MUDANÇA 1: importa as funções de leitura do api.js
-import { loadEquipes, loadUsuarios } from '../../lib/api'
+import { loadProdutividade } from '../../lib/api'
 
 const CLICKUP_WORKSPACE = 'https://app.clickup.com'
 const CLICKUP_DESIGN    = 'https://app.clickup.com/9007154660/v/l/8cdwhf4-13093'
@@ -12,189 +11,303 @@ const CLICKUP_VIDEO     = 'https://app.clickup.com/9007154660/v/l/6-901316762308
 const CLICKUP_AGENDA    = 'https://app.clickup.com/9007154660/v/l/8cdwhf4-13173'
 
 const LISTS = [
-  { icon: Palette,  name: 'Design',          label: 'Abrir Lista de Design', desc: 'Aprovação de criativos, identidade visual e materiais gráficos da conta.', color: 'violet', url: CLICKUP_DESIGN  },
-  { icon: Video,    name: 'Edição de Vídeo', label: 'Abrir Lista de Vídeo',  desc: 'Roteiros, gravações, edições e publicação de conteúdo em vídeo.',          color: 'amber',  url: CLICKUP_VIDEO  },
-  { icon: Calendar, name: 'Agendamentos',    label: 'Abrir Calendário',      desc: 'Calendário editorial e publicações sincronizados com o calendário da conta.', color: 'green',  url: CLICKUP_AGENDA },
+  {
+    icon: Palette,
+    name: 'Design',
+    label: 'Abrir Lista de Design',
+    desc: 'Aprovação de criativos, identidade visual e materiais gráficos da conta.',
+    color: 'violet',
+    url: CLICKUP_DESIGN,
+  },
+  {
+    icon: Video,
+    name: 'Edição de Vídeo',
+    label: 'Abrir Lista de Vídeo',
+    desc: 'Roteiros, gravações, edições e publicação de conteúdo em vídeo.',
+    color: 'amber',
+    url: CLICKUP_VIDEO,
+  },
+  {
+    icon: Calendar,
+    name: 'Agendamentos',
+    label: 'Abrir Calendário',
+    desc: 'Calendário editorial e publicações sincronizados com o calendário da conta.',
+    color: 'green',
+    url: CLICKUP_AGENDA,
+  },
 ]
 
-/* ── Equipes fixas com ícones e cores ─────────────────────── */
-const EQUIPES_DEF = [
-  { key: 'design',  label: 'Design',          Icon: Palette,    color: 'violet' },
-  { key: 'video',   label: 'Edição de Vídeo', Icon: Video,      color: 'amber'  },
-  { key: 'trafego', label: 'Tráfego',          Icon: TrendingUp, color: 'cyan'   },
-  { key: 'crm',     label: 'CRM',              Icon: Handshake,  color: 'green'  },
+const PEOPLE = [
+  { key: 'patricia', nome: 'Patrícia', funcao: 'Design', color: 'violet' },
+  { key: 'anna', nome: 'Anna', funcao: 'Edição de Vídeos', color: 'amber' },
+  { key: 'bruno', nome: 'Bruno', funcao: 'Agendamentos', color: 'green' },
 ]
 
-const EQUIPES_VAZIO = { design: [], video: [], trafego: [], crm: [] }
-
-/* ── Métricas demo por equipe ─────────────────────────────── */
-/* TODO Fase 2: substituir por dados reais (ClickUp via tabela no Supabase) */
-const PROD_EQUIPES = {
-  todos:   { concluidas: 54, andamento: 11, pendentes: 10 },
-  design:  { concluidas: 18, andamento:  5, pendentes:  3 },
-  video:   { concluidas: 12, andamento:  4, pendentes:  6 },
-  trafego: { concluidas: 14, andamento:  2, pendentes:  1 },
-  crm:     { concluidas: 10, andamento:  0, pendentes:  0 },
+const METRIC_CONFIG = {
+  patricia: [
+    { key: 'paraFazer', label: 'Para Fazer', tone: 'cyan' },
+    { key: 'emAprovacao', label: 'Em Aprovação', tone: 'amber' },
+    { key: 'emAlteracao', label: 'Em Alteração', tone: 'red' },
+  ],
+  anna: [
+    { key: 'paraFazer', label: 'Para Fazer', tone: 'cyan' },
+    { key: 'emAndamento', label: 'Em Andamento', tone: 'violet' },
+    { key: 'emAprovacao', label: 'Em Aprovação', tone: 'amber' },
+    { key: 'emAlteracao', label: 'Em Alteração', tone: 'red' },
+  ],
+  bruno: [
+    { key: 'paraAgendar', label: 'Para Agendar', tone: 'amber' },
+    { key: 'postado', label: 'Postado · 30 dias', tone: 'green' },
+  ],
 }
 
-const PERSON_FACTORS = [0.40, 0.30, 0.18, 0.12]
-
-// MUDANÇA 2: o helper loadStorage() foi DELETADO — o api.js faz esse papel.
-
-function getMetrics(equipeKey, pessoaId, usuarios) {
-  const base = PROD_EQUIPES[equipeKey] ?? PROD_EQUIPES.todos
-  if (pessoaId === 'todos') return base
-  const idx = usuarios.findIndex(u => u.id === pessoaId)
-  if (idx === -1) return base
-  const f = PERSON_FACTORS[idx % PERSON_FACTORS.length]
-  return {
-    concluidas: Math.max(1, Math.round(base.concluidas * f) + (idx % 3)),
-    andamento:  Math.max(0, Math.round(base.andamento  * f)),
-    pendentes:  Math.max(0, Math.round(base.pendentes  * f) - (idx % 2)),
-  }
+const SOURCE_TEXT = {
+  patricia: 'Para Fazer vem de Processo de Design & Criação. Aprovação e alteração vêm da pasta Clientes, filtradas pelo campo personalizado Designer = Patrícia.',
+  anna: 'Para Fazer e Em Andamento vêm de Edição de Vídeos. Aprovação e alteração vêm da pasta Clientes, filtradas por Anna.',
+  bruno: 'Em aberto considera Para Agendar. Postado considera apenas tarefas atualizadas nos últimos 30 dias na lista de Agendamentos.',
 }
 
-function pct(part, total) {
-  return total > 0 ? Math.round((part / total) * 100) : 0
-}
-
-/* ── Card de Produtividade ──────────────────────────────────── */
 function CardProdutividade() {
-  const [equipe,   setEquipe]   = useState('todos')
-  const [pessoaId, setPessoaId] = useState('todos')
+  const [activePerson, setActivePerson] = useState('patricia')
+  const [payload, setPayload] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [historyOpen, setHistoryOpen] = useState(false)
 
-  // MUDANÇA 3: leitura síncrona a cada render virou estado + useEffect.
-  // Esta tela só LÊ — não salva nada — então não precisa da flag
-  // "carregado" (ela só existe para proteger SAVES automáticos).
-  const [equipes,  setEquipes]  = useState(EQUIPES_VAZIO)
-  const [usuarios, setUsuarios] = useState([])
-
-  useEffect(() => {
-    loadEquipes().then(v => setEquipes(v ?? EQUIPES_VAZIO))
-    loadUsuarios().then(setUsuarios)
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      setPayload(await loadProdutividade(30))
+    } catch (err) {
+      setError(err.message || 'Não foi possível consultar o ClickUp.')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  /* Membros da equipe selecionada (ou todos se "todos") */
-  const membrosEquipe = equipe === 'todos'
-    ? usuarios
-    : (equipes[equipe] ?? []).map(id => usuarios.find(u => u.id === id)).filter(Boolean)
+  useEffect(() => {
+    refresh()
+  }, [refresh])
 
-  /* Reset pessoa se ela não pertence mais à equipe selecionada */
-  const pessoaValida = membrosEquipe.some(u => u.id === pessoaId) ? pessoaId : 'todos'
+  const person = payload?.pessoas?.[activePerson]
+  const metrics = METRIC_CONFIG[activePerson]
+  const deadline = person?.prazo
 
-  const data   = getMetrics(equipe, pessoaValida, usuarios)
-  const total  = data.concluidas + data.andamento + data.pendentes
-  const prodPct = pct(data.concluidas, total)
+  const total = useMemo(
+    () => metrics.reduce((sum, metric) => sum + Number(person?.metricas?.[metric.key] ?? 0), 0),
+    [metrics, person],
+  )
+
+  const updatedAt = payload?.gerado_em
+    ? new Date(payload.gerado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : null
+
+  function formatDate(value, includeTime = true) {
+    if (!value) return 'Sem vencimento'
+    return new Date(value).toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      ...(includeTime ? {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      } : {}),
+    })
+  }
 
   return (
-    <div className="prod-card dash-card">
-
-      {/* Cabeçalho */}
+    <section className="prod-card dash-card" aria-labelledby="produtividade-title">
       <div className="prod-card__head">
         <div className="prod-card__title-row">
           <div className="prod-card__icon"><BarChart2 size={16} /></div>
-          <h3 className="prod-card__title">Produtividade</h3>
+          <div>
+            <h3 id="produtividade-title" className="prod-card__title">Produtividade da equipe</h3>
+            <p className="prod-card__subtitle">
+              Status operacionais do ClickUp
+              {updatedAt && <> · atualizado às {updatedAt}</>}
+            </p>
+          </div>
         </div>
 
-        <div className="prod-filters">
-          {/* Filtro por equipe */}
-          <div className="prod-filter-tabs">
-            <button
-              className={`prod-filter-tab${equipe === 'todos' ? ' prod-filter-tab--active' : ''}`}
-              onClick={() => { setEquipe('todos'); setPessoaId('todos') }}
-            >
-              Todos
-            </button>
-            {EQUIPES_DEF.map(e => (
-              <button
-                key={e.key}
-                className={`prod-filter-tab${equipe === e.key ? ' prod-filter-tab--active' : ''}`}
-                onClick={() => { setEquipe(e.key); setPessoaId('todos') }}
-              >
-                {e.label}
+        <button
+          type="button"
+          className="prod-refresh"
+          onClick={refresh}
+          disabled={loading}
+          aria-label="Atualizar dados do ClickUp"
+        >
+          <RefreshCw size={14} className={loading ? 'prod-refresh__icon--spin' : ''} />
+          {loading ? 'Atualizando' : 'Atualizar'}
+        </button>
+      </div>
+
+      <div className="prod-person-tabs" role="tablist" aria-label="Profissionais">
+        {PEOPLE.map(item => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activePerson === item.key}
+            key={item.key}
+            className={`prod-person-tab prod-person-tab--${item.color}${activePerson === item.key ? ' prod-person-tab--active' : ''}`}
+            onClick={() => setActivePerson(item.key)}
+          >
+            <span className="prod-person-tab__avatar">{item.nome.slice(0, 1)}</span>
+            <span>
+              <strong>{item.nome}</strong>
+              <small>{item.funcao}</small>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {error ? (
+        <div className="prod-error" role="alert">
+          <AlertCircle size={18} />
+          <div>
+            <strong>Não foi possível carregar os dados.</strong>
+            <span>{error}</span>
+          </div>
+        </div>
+      ) : (
+        <div className={`prod-live${loading ? ' prod-live--loading' : ''}`}>
+          <div className="prod-live__summary">
+            <span className="prod-live__eyebrow">{person?.funcao ?? PEOPLE.find(p => p.key === activePerson)?.funcao}</span>
+            <strong className="prod-live__total">{loading ? '—' : total}</strong>
+            <span className="prod-live__total-label">
+              {activePerson === 'bruno' ? 'itens monitorados' : 'tarefas no fluxo'}
+            </span>
+          </div>
+
+          <div className={`prod-live__metrics prod-live__metrics--${metrics.length}`}>
+            {metrics.map(metric => (
+              <article className={`prod-live-metric prod-live-metric--${metric.tone}`} key={metric.key}>
+                <span className="prod-live-metric__label">{metric.label}</span>
+                <strong>{loading ? '—' : Number(person?.metricas?.[metric.key] ?? 0)}</strong>
+                <span className="prod-live-metric__bar" />
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activePerson !== 'bruno' && !error && (
+        <div className="prod-deadline">
+          <div className="prod-deadline__score">
+            <span className="prod-deadline__eyebrow">Entregas no prazo · 30 dias</span>
+            <strong>{loading ? '—' : deadline?.percentualNoPrazo == null ? '—' : `${deadline.percentualNoPrazo}%`}</strong>
+            <span>
+              {deadline?.percentualNoPrazo == null
+                ? 'Aguardando os primeiros eventos do webhook'
+                : 'das tarefas com data de vencimento'}
+            </span>
+          </div>
+
+          <div className="prod-deadline__counts">
+            <div className="prod-deadline-count prod-deadline-count--green">
+              <CheckCircle2 size={16} />
+              <span>No prazo</span>
+              <strong>{loading ? '—' : deadline?.noPrazo ?? 0}</strong>
+            </div>
+            <div className="prod-deadline-count prod-deadline-count--red">
+              <Clock3 size={16} />
+              <span>Atrasadas</span>
+              <strong>{loading ? '—' : deadline?.atrasadas ?? 0}</strong>
+            </div>
+            <div className="prod-deadline-count">
+              <AlertCircle size={16} />
+              <span>Sem prazo</span>
+              <strong>{loading ? '—' : deadline?.semPrazo ?? 0}</strong>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="prod-history-button"
+            onClick={() => setHistoryOpen(true)}
+          >
+            <History size={15} />
+            Ver histórico
+          </button>
+        </div>
+      )}
+
+      <p className="prod-source-note">{SOURCE_TEXT[activePerson]}</p>
+
+      {historyOpen && activePerson !== 'bruno' && (
+        <div className="prod-history-overlay" onClick={() => setHistoryOpen(false)}>
+          <aside
+            className="prod-history"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Histórico de entregas de ${person?.nome ?? ''}`}
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="prod-history__head">
+              <div>
+                <span>Últimos 30 dias</span>
+                <h4>Histórico de {person?.nome}</h4>
+              </div>
+              <button type="button" onClick={() => setHistoryOpen(false)} aria-label="Fechar histórico">
+                <X size={17} />
               </button>
-            ))}
-          </div>
-
-          {/* Filtro por pessoa (membros da equipe selecionada) */}
-          {membrosEquipe.length > 0 && (
-            <div className="prod-select-wrap">
-              <select
-                className="prod-select"
-                value={pessoaValida}
-                onChange={e => setPessoaId(e.target.value)}
-              >
-                <option value="todos">Todas as pessoas</option>
-                {membrosEquipe.map(u => (
-                  <option key={u.id} value={u.id}>{u.nome}</option>
-                ))}
-              </select>
-              <ChevronDown size={12} className="prod-select-arrow" />
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* Corpo */}
-      <div className="prod-card__body">
-
-        {/* Gauge circular */}
-        <div className="prod-gauge">
-          <div className="prod-gauge__ring" style={{ '--prod-pct': `${prodPct}%` }}>
-            <div className="prod-gauge__hole">
-              <span className="prod-gauge__num">{prodPct}%</span>
-              <span className="prod-gauge__sub">concluído</span>
+            <div className="prod-history__list">
+              {(deadline?.historico ?? []).length === 0 ? (
+                <div className="prod-history__empty">
+                  <History size={24} />
+                  <strong>Nenhuma transição registrada ainda.</strong>
+                  <span>O histórico começa após a ativação do webhook do ClickUp.</span>
+                </div>
+              ) : (
+                deadline.historico.map((item, index) => (
+                  <article className="prod-history-item" key={`${item.task_id}-${item.changed_at}-${index}`}>
+                    <div className="prod-history-item__top">
+                      {item.task_url ? (
+                        <a href={item.task_url} target="_blank" rel="noopener noreferrer">
+                          {item.task_name}
+                        </a>
+                      ) : <strong>{item.task_name}</strong>}
+                      <span className={`prod-history-result prod-history-result--${item.deadline_result}`}>
+                        {item.deadline_result === 'on_time'
+                          ? 'No prazo'
+                          : item.deadline_result === 'late' ? 'Atrasada' : 'Sem prazo'}
+                      </span>
+                    </div>
+                    <div className="prod-history-item__transition">
+                      {item.status_before} <span>→</span> {item.status_after}
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>Mudança</dt>
+                        <dd>{formatDate(item.changed_at)}</dd>
+                      </div>
+                      <div>
+                        <dt>Alterado por</dt>
+                        <dd>{item.changed_by_name || 'Não informado'}</dd>
+                      </div>
+                      <div>
+                        <dt>Prazo</dt>
+                        <dd>{formatDate(item.due_at, item.due_has_time !== false)}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))
+              )}
             </div>
-          </div>
+          </aside>
         </div>
-
-        {/* Métricas + barras */}
-        <div className="prod-body__right">
-          <div className="prod-metrics">
-            {[
-              { dot: 'green', label: 'Concluídas',   val: data.concluidas },
-              { dot: 'amber', label: 'Em andamento', val: data.andamento  },
-              { dot: 'red',   label: 'Pendentes',    val: data.pendentes  },
-            ].map(({ dot, label, val }) => (
-              <div className="prod-metric" key={label}>
-                <div className="prod-metric__top">
-                  <div className={`prod-metric__dot prod-metric__dot--${dot}`} />
-                  <span className="prod-metric__label">{label}</span>
-                </div>
-                <span className="prod-metric__val">{val}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="prod-bars">
-            {[
-              { label: 'Concluídas', val: data.concluidas, cls: 'green' },
-              { label: 'Andamento',  val: data.andamento,  cls: 'amber' },
-              { label: 'Pendentes',  val: data.pendentes,  cls: 'red'   },
-            ].map(({ label, val, cls }) => (
-              <div className="prod-bar-row" key={label}>
-                <span className="prod-bar-label">{label}</span>
-                <div className="prod-bar">
-                  <div
-                    className={`prod-bar__fill prod-bar__fill--${cls}`}
-                    style={{ width: `${pct(val, total)}%` }}
-                  />
-                </div>
-                <span className="prod-bar-pct">{pct(val, total)}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+      )}
+    </section>
   )
 }
 
-/* ── Página de Projetos ─────────────────────────────────────── */
 export default function Projetos() {
   return (
     <div className="cc">
-
       <div className="cc-header">
         <div>
           <p className="cc-eyebrow">Gestão de Projetos</p>
@@ -210,7 +323,7 @@ export default function Projetos() {
           <div className="cc-workspace-icon"><Layers size={22} /></div>
           <div>
             <p className="cc-workspace-hero__name">ClickUp — Marazul</p>
-            <p className="cc-workspace-hero__sub">3 listas ativas &nbsp;·&nbsp; Sincronizado agora</p>
+            <p className="cc-workspace-hero__sub">3 listas ativas &nbsp;·&nbsp; Dados operacionais integrados</p>
           </div>
         </div>
         <div className="cc-workspace-hero__links">
@@ -223,10 +336,10 @@ export default function Projetos() {
       <CardProdutividade />
 
       <div className="cc-lists-grid">
-        {LISTS.map((list, i) => {
+        {LISTS.map(list => {
           const Icon = list.icon
           return (
-            <div key={i} className={`cc-list-card cc-list-card--${list.color}`}>
+            <div key={list.name} className={`cc-list-card cc-list-card--${list.color}`}>
               <div className="cc-list-card__head">
                 <div className={`cc-list-card__icon cc-list-card__icon--${list.color}`}>
                   <Icon size={20} />

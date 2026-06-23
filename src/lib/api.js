@@ -150,3 +150,19 @@ export async function deleteMetrica(id) {
   const { error } = await supabase.from('metricas').delete().eq('id', id)
   if (error) throw error
 }
+// ── Produtividade (ClickUp via Edge Function) ─────────────
+export async function loadProdutividade(days = 30) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/produtividade?days=${days}`
+  const resp = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${session?.access_token ?? ''}`,
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+  })
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}))
+    throw new Error(body.error || 'Falha ao carregar produtividade (' + resp.status + ')')
+  }
+  return resp.json()
+}
