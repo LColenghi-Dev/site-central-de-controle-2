@@ -59,7 +59,7 @@ const WEEK_DATA = [
 const PROJ_SUMMARY = { andamento: 8, revisao: 2, concluidos: 14 }
 
 /* ── n8n ──────────────────────────────────────────────────── */
-const N8N_API = '/api/n8n'
+const N8N_API = '/n8n-api'
 
 function timeAgo(iso) {
   if (!iso) return '—'
@@ -75,6 +75,12 @@ function timeAgo(iso) {
 function fmtCount(n) {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
   return n.toString()
+}
+
+function getN8nList(payload) {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.data)) return payload.data
+  return []
 }
 
 /* ── Componente KPI com contador animado ─────────────────── */
@@ -122,7 +128,7 @@ export default function VisaoGeral() {
   useEffect(() => {
     const load = async () => {
       try {
-        const headers = { 'Accept': 'application/json' }
+        const headers = { Accept: 'application/json' }
 
         const [wfRes, exRes] = await Promise.all([
           fetch(`${N8N_API}/api/v1/workflows`, { headers }),
@@ -133,8 +139,8 @@ export default function VisaoGeral() {
 
         const wfData  = await wfRes.json()
         const exData  = exRes.ok ? await exRes.json() : { data: [] }
-        const executions = exData.data ?? []
-        const workflows  = wfData.data ?? []
+        const executions = getN8nList(exData)
+        const workflows  = getN8nList(wfData)
 
         /* Flows ativos */
         const ativos = workflows.filter(w => w.active).length

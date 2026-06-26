@@ -1,32 +1,77 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   ExternalLink, TrendingUp, BarChart2, Megaphone,
-  DollarSign, MousePointer2, ShoppingCart, Percent,
-  User, AlertCircle, RefreshCw,
+  DollarSign, MousePointer2, ShoppingCart, Percent, Eye,
+  User, AlertCircle, RefreshCw, Calendar,
 } from 'lucide-react'
-import { loadMetricas } from '../../lib/api'
+import { loadTrafegoClients, loadTrafegoDaily } from '../../lib/api'
 
-const EXTERNAL_DASHBOARD_URL = 'https://api.marazulagenciadigital.com.br'
+const EXTERNAL_DASHBOARD_URL = 'https://trafego.marazulagenciadigital.com.br'
 
 const CORES = ['cyan', 'violet', 'green', 'amber']
-const METRIC_ICONS = [DollarSign, MousePointer2, ShoppingCart, TrendingUp, Percent]
+const METRIC_ICONS = [DollarSign, Eye, MousePointer2, ShoppingCart, Percent]
 const METRIC_COLORS = ['cyan', 'violet', 'green', 'amber', 'cyan']
-const fmtBRL  = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-const fmtNum  = v => Number(v).toLocaleString('pt-BR')
-const fmtData = d => new Date(d + 'T00:00').toLocaleDateString('pt-BR')
 
-function useMetricas() {
-  const [rows, setRows] = useState([])
+const fmtBRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const fmtNum = v => Number(v || 0).toLocaleString('pt-BR')
+const fmtData = d => d ? new Date(d + 'T00:00').toLocaleDateString('pt-BR') : '-'
+
+function currentMonthRange() {
+  const now = new Date()
+  const first = new Date(now.getFullYear(), now.getMonth(), 1)
+  const iso = d => d.toISOString().slice(0, 10)
+  return { since: iso(first), until: iso(now) }
+}
+
+function useTrafegoClients() {
+  const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
   async function load() {
-    setLoading(true); setError(null)
-    try { setRows(await loadMetricas()) }
-    catch (e) { setError(e.message) }
-    finally { setLoading(false) }
+    setLoading(true)
+    setError(null)
+    try {
+      setClients(await loadTrafegoClients())
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
   }
+
   useEffect(() => { load() }, [])
-  return { rows, loading, error, retry: load }
+  return { clients, loading, error, retry: load }
+}
+
+function useTrafegoDaily(activeClientId, range) {
+  const [cache, setCache] = useState({})
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const cacheKey = activeClientId ? `${activeClientId}:${range.since}:${range.until}` : ''
+
+  async function load({ force = false } = {}) {
+    if (!activeClientId || (!force && cache[cacheKey])) return
+    setLoading(true)
+    setError(null)
+    try {
+      const rows = await loadTrafegoDaily({ clientId: activeClientId, ...range })
+      setCache(prev => ({ ...prev, [cacheKey]: rows }))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [activeClientId, range.since, range.until])
+
+  return {
+    rows: cache[cacheKey] ?? [],
+    loading,
+    error,
+    retry: () => load({ force: true }),
+  }
 }
 
 function ErrorBox({ message, onRetry }) {
@@ -34,7 +79,7 @@ function ErrorBox({ message, onRetry }) {
     <div className="tp-fetch-error">
       <AlertCircle size={18} className="tp-fetch-error__icon" />
       <div className="tp-fetch-error__body">
-        <p className="tp-fetch-error__title">Não foi possível carregar os dados</p>
+        <p className="tp-fetch-error__title">Nao foi possivel carregar os dados</p>
         <p className="tp-fetch-error__sub">{message}</p>
       </div>
       <button className="tp-fetch-error__retry" onClick={onRetry}>
@@ -45,33 +90,51 @@ function ErrorBox({ message, onRetry }) {
 }
 
 export default function TrafegoPago() {
-  const { rows, loading, error, retry } = useMetricas()
+  const initialRange = useMemo(() => currentMonthRange(), [])
+  const [range, setRange] = useState(initialRange)
+  const [draftRange, setDraftRange] = useState(initialRange)
+  const { clients: apiClients, loading: loadingClients, error: clientsError, retry: retryClients } = useTrafegoClients()
   const [activeClientId, setActiveClientId] = useState(null)
 
-  const clients = [...new Set(rows.map(r => r.cliente).filter(Boolean))]
-    .map((name, i) => ({ id: name, name, color: CORES[i % CORES.length] }))
+  const clients = apiClients.map((client, i) => ({ ...client, color: CORES[i % CORES.length] }))
 
   useEffect(() => {
     if (clients.length > 0 && !activeClientId) setActiveClientId(clients[0].id)
-  }, [clients])
+  }, [clients, activeClientId])
 
+  const { rows: dados, loading: loadingDaily, error: dailyError, retry: retryDaily } = useTrafegoDaily(activeClientId, range)
   const activeClient = clients.find(c => c.id === activeClientId)
-  const dados = rows.filter(r => r.cliente === activeClientId)
+
   const tot = k => dados.reduce((s, r) => s + Number(r[k] ?? 0), 0)
-  const investimento = tot('investimento'), sessoes = tot('sessoes'), conversoes = tot('conversoes')
+  const investimento = tot('investimento')
+  const impressoes = tot('impressoes')
+  const cliques = tot('cliques')
+  const conversoes = tot('conversoes')
 
   const metrics = [
-    { label: 'Investimento',      value: fmtBRL(investimento), sub: 'Total no período' },
-    { label: 'Sessões',           value: fmtNum(sessoes), sub: 'Visitas registradas' },
-    { label: 'Conversões',        value: fmtNum(conversoes), sub: 'Ações concluídas' },
-    { label: 'Custo/Conversão',   value: conversoes ? fmtBRL(investimento / conversoes) : '—', sub: 'Investimento ÷ conversões' },
-    { label: 'Taxa de Conversão', value: sessoes ? (conversoes / sessoes * 100).toFixed(1) + '%' : '—', sub: 'Conversões ÷ sessões' },
+    { label: 'Investimento', value: fmtBRL(investimento), sub: `${fmtData(range.since)} - ${fmtData(range.until)}` },
+    { label: 'Impressoes', value: fmtNum(impressoes), sub: 'Alcance entregue' },
+    { label: 'Cliques', value: fmtNum(cliques), sub: 'Interacoes registradas' },
+    { label: 'Conversoes', value: fmtNum(conversoes), sub: 'Acoes concluidas' },
+    { label: 'Custo/Conversao', value: conversoes ? fmtBRL(investimento / conversoes) : '-', sub: 'Investimento / conversoes' },
   ]
+
+  const invalidRange = Boolean(draftRange.since && draftRange.until && draftRange.since > draftRange.until)
+  const rangeChanged = draftRange.since !== range.since || draftRange.until !== range.until
+
+  function applyDateFilter(e) {
+    e.preventDefault()
+    if (invalidRange || !draftRange.since || !draftRange.until) return
+    setRange(draftRange)
+  }
+
+  function resetDateFilter() {
+    setDraftRange(initialRange)
+    setRange(initialRange)
+  }
 
   return (
     <div className="tp-portal">
-
-      {/* ── Hero portal card ───────────────────────────────── */}
       <div className="tp-portal__hero">
         <div className="tp-portal__blob tp-portal__blob--cyan" />
         <div className="tp-portal__blob tp-portal__blob--violet" />
@@ -80,11 +143,11 @@ export default function TrafegoPago() {
           <div className="tp-portal__icon-ring">
             <div className="tp-portal__icon-inner"><TrendingUp size={28} /></div>
           </div>
-          <h2 className="tp-portal__title">Dashboard de Tráfego Pago</h2>
+          <h2 className="tp-portal__title">Dashboard de Trafego Pago</h2>
           <p className="tp-portal__desc">
-            Acesse o painel completo do seu gestor de tráfego com métricas
-            em tempo real de Meta Ads e Google Ads, análise de campanhas,
-            ROAS e relatórios detalhados.
+            Acesse o painel completo do seu gestor de trafego com metricas
+            em tempo real de Meta Ads e Google Ads, analise de campanhas,
+            ROAS e relatorios detalhados.
           </p>
           <div className="tp-portal__platforms">
             <div className="tp-portal__platform tp-portal__platform--meta"><Megaphone size={14} />Meta Ads</div>
@@ -98,21 +161,60 @@ export default function TrafegoPago() {
         </div>
       </div>
 
-      {/* ── Relatório por Cliente ──────────────────────────── */}
       <div className="tp-report">
         <div className="tp-report__header">
           <div className="tp-report__header-left">
-            <h3 className="tp-report__title">Relatório por Cliente</h3>
-            <p className="tp-report__sub">Selecione o cliente para visualizar as métricas</p>
+            <span className="tp-report__source-badge">API Trafego v1</span>
+            <h3 className="tp-report__title">Relatorio por Cliente</h3>
+            <p className="tp-report__sub">
+              Selecione o cliente para visualizar as metricas de {fmtData(range.since)} a {fmtData(range.until)}
+            </p>
           </div>
+          <form className="tp-date-filter" onSubmit={applyDateFilter}>
+            <label className="tp-date-field">
+              <span>De</span>
+              <Calendar size={13} />
+              <input
+                type="date"
+                value={draftRange.since}
+                max={draftRange.until || undefined}
+                onChange={e => setDraftRange(prev => ({ ...prev, since: e.target.value }))}
+              />
+            </label>
+            <label className="tp-date-field">
+              <span>Ate</span>
+              <Calendar size={13} />
+              <input
+                type="date"
+                value={draftRange.until}
+                min={draftRange.since || undefined}
+                onChange={e => setDraftRange(prev => ({ ...prev, until: e.target.value }))}
+              />
+            </label>
+            <button className="tp-date-apply" type="submit" disabled={!rangeChanged || invalidRange}>
+              <RefreshCw size={13} /> Atualizar
+            </button>
+            <button className="tp-date-reset" type="button" onClick={resetDateFilter}>
+              Mes atual
+            </button>
+            {invalidRange && <p className="tp-date-error">Periodo invalido</p>}
+          </form>
         </div>
 
-        {error && <ErrorBox message={error} onRetry={retry} />}
-        {!loading && !error && clients.length === 0 && (
-          <p className="tp-report__sub">Nenhum dado ainda — insira lançamentos na tabela métricas.</p>
+        {clientsError && <ErrorBox message={clientsError} onRetry={retryClients} />}
+        {!clientsError && dailyError && <ErrorBox message={dailyError} onRetry={retryDaily} />}
+
+        {loadingClients && (
+          <div className="tp-client-selector">
+            {[0, 1, 2].map(i => <div key={i} className="tp-client-tab-skeleton" />)}
+          </div>
         )}
 
-        {!loading && !error && clients.length > 0 && (
+        {!loadingClients && !clientsError && clients.length === 0 && (
+          <p className="tp-report__sub">Nenhum cliente retornado pela API de trafego.</p>
+        )}
+
+        {!loadingClients && !clientsError && clients.length > 0 && (
           <div className="tp-client-selector">
             {clients.map(c => (
               <button
@@ -128,7 +230,7 @@ export default function TrafegoPago() {
           </div>
         )}
 
-        {activeClientId && dados.length > 0 && (
+        {activeClientId && !clientsError && (
           <div className="tp-client-panel" key={activeClientId}>
             <div className="tp-report__metrics">
               {metrics.map((m, i) => {
@@ -139,7 +241,7 @@ export default function TrafegoPago() {
                       <div className="tp-report__metric-icon"><Icon size={14} /></div>
                       <span className="tp-report__metric-label">{m.label}</span>
                     </div>
-                    <p className="tp-report__metric-value">{m.value}</p>
+                    <p className="tp-report__metric-value">{loadingDaily ? '...' : m.value}</p>
                     <p className="tp-report__metric-sub">{m.sub}</p>
                   </div>
                 )
@@ -148,17 +250,24 @@ export default function TrafegoPago() {
 
             <div className="dash-card tp-report__table-card">
               <div className="tp-report__table-header">
-                <p className="dash-label">Lançamentos — {activeClient?.name}</p>
+                <p className="dash-label">Metricas diarias - {activeClient?.name}</p>
+                {loadingDaily && <span className="tp-report__table-hint">Carregando...</span>}
               </div>
               <table className="tp-table">
                 <thead>
-                  <tr><th>Data</th><th>Sessões</th><th>Conversões</th><th>Investimento</th></tr>
+                  <tr><th>Data</th><th>Impressoes</th><th>Cliques</th><th>Conversoes</th><th>Investimento</th></tr>
                 </thead>
                 <tbody>
+                  {!loadingDaily && dados.length === 0 && (
+                    <tr className="tp-report__row-placeholder">
+                      <td colSpan={5}>Nenhuma metrica diaria para este cliente no periodo.</td>
+                    </tr>
+                  )}
                   {dados.map(r => (
                     <tr key={r.id}>
                       <td>{fmtData(r.data)}</td>
-                      <td>{fmtNum(r.sessoes)}</td>
+                      <td>{fmtNum(r.impressoes)}</td>
+                      <td>{fmtNum(r.cliques)}</td>
                       <td>{fmtNum(r.conversoes)}</td>
                       <td>{fmtBRL(r.investimento)}</td>
                     </tr>

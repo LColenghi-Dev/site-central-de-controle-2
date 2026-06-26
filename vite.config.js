@@ -1,20 +1,41 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 5199,
-    proxy: {
-      /* Proxy do n8n — evita CORS em desenvolvimento.
-         Em produção, configure N8N_CORS_ALLOW_ORIGINS no seu servidor n8n
-         ou replique esta regra no Nginx/Caddy da hospedagem. */
-      '/n8n-api': {
-        target: 'https://n8n.marazulagenciadigital.com.br',
-        changeOrigin: true,
-        secure: false,          // aceita certificado do servidor n8n
-        rewrite: path => path.replace(/^\/n8n-api/, ''),
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const n8nApiKey = env.VITE_N8N_API_KEY
+  const trafegoApiKey = env.TRAFEGO_API_KEY
+
+  return {
+    plugins: [react()],
+    server: {
+      port: 5199,
+      proxy: {
+        /* Proxy do n8n - evita CORS em desenvolvimento e injeta a API key. */
+        '/n8n-api': {
+          target: 'https://n8n.marazulagenciadigital.com.br',
+          changeOrigin: true,
+          secure: false,
+          rewrite: path => path.replace(/^\/n8n-api/, ''),
+          configure: proxy => {
+            proxy.on('proxyReq', proxyReq => {
+              if (n8nApiKey) proxyReq.setHeader('X-N8N-API-KEY', n8nApiKey)
+            })
+          },
+        },
+        /* Proxy da API de tráfego - evita CORS em desenvolvimento e injeta a API key. */
+        '/trafego-api': {
+          target: 'https://trafego.marazulagenciadigital.com.br',
+          changeOrigin: true,
+          secure: false,
+          rewrite: path => path.replace(/^\/trafego-api/, ''),
+          configure: proxy => {
+            proxy.on('proxyReq', proxyReq => {
+              if (trafegoApiKey) proxyReq.setHeader('Authorization', `Bearer ${trafegoApiKey}`)
+            })
+          },
+        },
       },
     },
-  },
+  }
 })

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Plus, X, FileText, Calendar, ChevronDown, ChevronUp,
   Search, Upload, File, FileImage, Paperclip, ChevronRight, Download,
@@ -453,8 +454,9 @@ export default function RelatoriosDemandas() {
         </div>
       )}
 
-      {showModal && (
-        <NovoRelatorioModal onClose={() => setShowModal(false)} onSave={handleSave} />
+      {showModal && createPortal(
+        <NovoRelatorioModal onClose={() => setShowModal(false)} onSave={handleSave} />,
+        document.body
       )}
     </div>
   )

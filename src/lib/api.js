@@ -150,6 +150,66 @@ export async function deleteMetrica(id) {
   const { error } = await supabase.from('metricas').delete().eq('id', id)
   if (error) throw error
 }
+
+// ── Tráfego Pago (API externa) ────────────────────────────
+const TRAFEGO_API_BASE = import.meta.env.VITE_TRAFEGO_API_BASE || '/trafego-api/api/v1'
+
+function getList(payload, keys = []) {
+  if (Array.isArray(payload)) return payload
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) return payload[key]
+  }
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.items)) return payload.items
+  if (Array.isArray(payload?.results)) return payload.results
+  return []
+}
+
+async function fetchTrafego(path, params = {}) {
+  const origin = globalThis.location?.origin ?? 'http://localhost'
+  const base = TRAFEGO_API_BASE.startsWith('http')
+    ? TRAFEGO_API_BASE
+    : new URL(TRAFEGO_API_BASE, origin).toString()
+  const url = new URL(path.replace(/^\//, ''), base.endsWith('/') ? base : `${base}/`)
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value)
+  })
+
+  const headers = { Accept: 'application/json' }
+  const key = import.meta.env.VITE_TRAFEGO_API_KEY
+  if (key) headers.Authorization = `Bearer ${key}`
+
+  const resp = await fetch(url, { headers })
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}))
+    throw new Error(body.error || body.message || `Falha na API de tráfego (${resp.status})`)
+  }
+  return resp.json()
+}
+
+export async function loadTrafegoClients() {
+  const payload = await fetchTrafego('clients')
+  return getList(payload, ['clients']).map((c, i) => ({
+    id: String(c.id ?? c.clientId ?? c.client_id ?? c.slug ?? c.name ?? c.nome ?? i),
+    name: c.name ?? c.nome ?? c.clientName ?? c.client_name ?? c.accountName ?? 'Cliente sem nome',
+    raw: c,
+  }))
+}
+
+export async function loadTrafegoDaily({ clientId, since, until }) {
+  const payload = await fetchTrafego('daily', { clientId, since, until, limit: 1000 })
+  return getList(payload, ['daily', 'rows']).map((r, i) => ({
+    id: String(r.id ?? `${clientId ?? 'all'}-${r.date ?? r.data ?? i}`),
+    data: r.date ?? r.data ?? r.day ?? r.dia,
+    investimento: Number(r.spend ?? r.investment ?? r.investimento ?? r.cost ?? r.custo ?? 0),
+    impressoes: Number(r.impressions ?? r.impressoes ?? r.impressões ?? 0),
+    cliques: Number(r.clicks ?? r.cliques ?? r.sessions ?? r.sessoes ?? r.sessões ?? 0),
+    conversoes: Number(r.conversions ?? r.conversoes ?? r.conversões ?? r.leads ?? 0),
+    receita: Number(r.revenue ?? r.receita ?? r.valorConversao ?? r.conversionValue ?? 0),
+    raw: r,
+  })).filter(r => r.data)
+}
+
 // ── Produtividade (ClickUp via Edge Function) ─────────────
 export async function loadProdutividade(days = 30) {
   const { data: { session } } = await supabase.auth.getSession()

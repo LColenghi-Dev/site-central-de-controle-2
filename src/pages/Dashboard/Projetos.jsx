@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle, BarChart2, Calendar, CheckCircle2, Clock3,
-  ExternalLink, History, Layers, Palette, RefreshCw, Video, X,
+  ExternalLink, History, Info, Palette, RefreshCw, Video, X,
 } from 'lucide-react'
 import { loadProdutividade } from '../../lib/api'
 
@@ -119,7 +119,7 @@ function CardProdutividade() {
   }
 
   return (
-    <section className="prod-card dash-card" aria-labelledby="produtividade-title">
+    <section className="prod-card dash-card prod-card--focus" aria-labelledby="produtividade-title">
       <div className="prod-card__head">
         <div className="prod-card__title-row">
           <div className="prod-card__icon"><BarChart2 size={16} /></div>
@@ -234,7 +234,10 @@ function CardProdutividade() {
         </div>
       )}
 
-      <p className="prod-source-note">{SOURCE_TEXT[activePerson]}</p>
+      <details className="prod-source-details">
+        <summary><Info size={13} /> Origem dos dados</summary>
+        <p>{SOURCE_TEXT[activePerson]}</p>
+      </details>
 
       {historyOpen && activePerson !== 'bruno' && (
         <div className="prod-history-overlay" onClick={() => setHistoryOpen(false)}>
@@ -318,45 +321,30 @@ export default function Projetos() {
         </a>
       </div>
 
-      <div className="cc-workspace-hero dash-card">
-        <div className="cc-workspace-hero__inner">
-          <div className="cc-workspace-icon"><Layers size={22} /></div>
-          <div>
-            <p className="cc-workspace-hero__name">ClickUp — Marazul</p>
-            <p className="cc-workspace-hero__sub">3 listas ativas &nbsp;·&nbsp; Dados operacionais integrados</p>
-          </div>
-        </div>
-        <div className="cc-workspace-hero__links">
-          <a href={CLICKUP_WORKSPACE} target="_blank" rel="noopener noreferrer" className="cc-quick-link">
-            Visão Geral <ExternalLink size={11} />
-          </a>
-        </div>
-      </div>
-
       <CardProdutividade />
 
-      <div className="cc-lists-grid">
+      <div className="project-shortcuts" aria-label="Atalhos ClickUp">
         {LISTS.map(list => {
           const Icon = list.icon
           return (
-            <div key={list.name} className={`cc-list-card cc-list-card--${list.color}`}>
-              <div className="cc-list-card__head">
-                <div className={`cc-list-card__icon cc-list-card__icon--${list.color}`}>
-                  <Icon size={20} />
-                </div>
-                <span className="cc-connected">
-                  <span className="cc-connected-dot" /> Conectado
-                </span>
-              </div>
-              <p className="cc-list-card__name">{list.name}</p>
-              <p className="cc-list-card__desc">{list.desc}</p>
-              <a href={list.url} target="_blank" rel="noopener noreferrer" className={`cc-launch-btn cc-launch-btn--${list.color}`}>
-                {list.label} <ExternalLink size={14} />
-              </a>
-            </div>
+            <a
+              key={list.name}
+              href={list.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`project-shortcut project-shortcut--${list.color}`}
+            >
+              <span className="project-shortcut__icon"><Icon size={17} /></span>
+              <span className="project-shortcut__body">
+                <strong>{list.name}</strong>
+                <small>{list.label}</small>
+              </span>
+              <ExternalLink size={13} />
+            </a>
           )
         })}
       </div>
     </div>
   )
 }
+
