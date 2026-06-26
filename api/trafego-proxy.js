@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  const { _path = '', ...query } = req.query
+  const { _path = '', proxypath, ...query } = req.query
 
   const url = new URL(`https://trafego.marazulagenciadigital.com.br/${_path}`)
   Object.entries(query).forEach(([k, v]) => url.searchParams.set(k, v))

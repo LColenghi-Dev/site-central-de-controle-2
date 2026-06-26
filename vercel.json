@@ -1,7 +1,7 @@
 {
   "rewrites": [
-    { "source": "/n8n-api/:path*", "destination": "/api/n8n-proxy?_path=:path*" },
-    { "source": "/trafego-api/:path*", "destination": "/api/trafego-proxy?_path=:path*" },
+    { "source": "/n8n-api/:proxypath*", "destination": "/api/n8n-proxy?_path=:proxypath*" },
+    { "source": "/trafego-api/:proxypath*", "destination": "/api/trafego-proxy?_path=:proxypath*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
