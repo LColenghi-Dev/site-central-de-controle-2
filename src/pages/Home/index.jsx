@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   TrendingUp,
   Users,
@@ -28,10 +29,40 @@ const METRIC_BADGES = ['m-badge--green', 'm-badge--cyan', 'm-badge--yellow', 'm-
 const STATS = [
   { value: 'R$ 2.4M+', label: 'Receita gerenciada' },
   { value: '4.2×',     label: 'ROAS médio'          },
-  { value: '38',       label: 'Clientes ativos'      },
+  { value: '16',       label: 'Clientes ativos'      },
 ]
 
 export default function Home() {
+  const [activeClients, setActiveClients] = useState(STATS[2].value)
+
+  useEffect(() => {
+    let isMounted = true
+
+    fetch('/api/clientes-ativos')
+      .then((response) => {
+        if (!response.ok) throw new Error('Clientes API unavailable')
+        return response.json()
+      })
+      .then((data) => {
+        if (isMounted && Number.isFinite(data.activeClients)) {
+          setActiveClients(String(data.activeClients))
+        }
+      })
+      .catch(() => {
+        if (isMounted) setActiveClients(STATS[2].value)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const stats = STATS.map((stat) =>
+    stat.label === 'Clientes ativos'
+      ? { ...stat, value: activeClients }
+      : stat
+  )
+
   return (
     <>
       <Navbar />
@@ -73,7 +104,7 @@ export default function Home() {
 
           {/* Stats row */}
           <div className="hero__stats">
-            {STATS.map((s, i) => (
+            {stats.map((s, i) => (
               <div key={i} className="hero__stat">
                 <span className="hero__stat-value">{s.value}</span>
                 <span className="hero__stat-label">{s.label}</span>

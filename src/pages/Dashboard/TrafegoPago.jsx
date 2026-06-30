@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   ExternalLink, TrendingUp, BarChart2, Megaphone,
   DollarSign, MousePointer2, ShoppingCart, Percent, Eye,
-  User, AlertCircle, RefreshCw, Calendar,
+  User, AlertCircle, RefreshCw, Calendar, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { loadTrafegoClients, loadTrafegoDaily } from '../../lib/api'
 
@@ -15,6 +15,11 @@ const METRIC_COLORS = ['cyan', 'violet', 'green', 'amber', 'cyan']
 const fmtBRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const fmtNum = v => Number(v || 0).toLocaleString('pt-BR')
 const fmtData = d => d ? new Date(d + 'T00:00').toLocaleDateString('pt-BR') : '-'
+const addDays = (value, amount) => {
+  const date = value ? new Date(value + 'T00:00') : new Date()
+  date.setDate(date.getDate() + amount)
+  return date.toISOString().slice(0, 10)
+}
 
 function currentMonthRange() {
   const now = new Date()
@@ -86,6 +91,35 @@ function ErrorBox({ message, onRetry }) {
         <RefreshCw size={13} /> Tentar novamente
       </button>
     </div>
+  )
+}
+
+function DateStepField({ label, value, min, max, onChange }) {
+  const canPrev = !min || addDays(value, -1) >= min
+  const canNext = !max || addDays(value, 1) <= max
+
+  function move(amount) {
+    const next = addDays(value, amount)
+    if ((min && next < min) || (max && next > max)) return
+    onChange(next)
+  }
+
+  return (
+    <label className="tp-date-field">
+      <span>{label}</span>
+      <div className="tp-date-stepper">
+        <button type="button" onClick={() => move(-1)} disabled={!canPrev} aria-label={`${label} anterior`}>
+          <ChevronLeft size={14} />
+        </button>
+        <div className="tp-date-stepper__value">
+          <Calendar size={13} />
+          {fmtData(value)}
+        </div>
+        <button type="button" onClick={() => move(1)} disabled={!canNext} aria-label={`${label} seguinte`}>
+          <ChevronRight size={14} />
+        </button>
+      </div>
+    </label>
   )
 }
 
@@ -171,26 +205,18 @@ export default function TrafegoPago() {
             </p>
           </div>
           <form className="tp-date-filter" onSubmit={applyDateFilter}>
-            <label className="tp-date-field">
-              <span>De</span>
-              <Calendar size={13} />
-              <input
-                type="date"
-                value={draftRange.since}
-                max={draftRange.until || undefined}
-                onChange={e => setDraftRange(prev => ({ ...prev, since: e.target.value }))}
-              />
-            </label>
-            <label className="tp-date-field">
-              <span>Ate</span>
-              <Calendar size={13} />
-              <input
-                type="date"
-                value={draftRange.until}
-                min={draftRange.since || undefined}
-                onChange={e => setDraftRange(prev => ({ ...prev, until: e.target.value }))}
-              />
-            </label>
+            <DateStepField
+              label="De"
+              value={draftRange.since}
+              max={draftRange.until || undefined}
+              onChange={since => setDraftRange(prev => ({ ...prev, since }))}
+            />
+            <DateStepField
+              label="Ate"
+              value={draftRange.until}
+              min={draftRange.since || undefined}
+              onChange={until => setDraftRange(prev => ({ ...prev, until }))}
+            />
             <button className="tp-date-apply" type="submit" disabled={!rangeChanged || invalidRange}>
               <RefreshCw size={13} /> Atualizar
             </button>

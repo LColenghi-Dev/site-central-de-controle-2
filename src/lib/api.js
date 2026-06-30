@@ -11,7 +11,7 @@ export async function loadRelatorios() {
 }
 
 export async function createRelatorio(relatorio) {
-  const { criadoEm, arquivos = [], ...campos } = relatorio
+  const { criadoEm, arquivos = [], responsavelEmail, ...campos } = relatorio
   const relatorioId = crypto.randomUUID()
 
   const arquivosUpload = await Promise.all(
@@ -132,6 +132,43 @@ export async function getAnexoUrl(path) {
     .createSignedUrl(path, 3600)
   if (error) throw error
   return data.signedUrl
+}
+
+export async function notifyWebhookRelatorio(relatorio) {
+  const webhookPath = import.meta.env.DEV
+    ? '/n8n-api/webhook-test/relatorio-interno'
+    : '/n8n-api/webhook/relatorio-interno'
+
+  const arquivos = await Promise.all(
+    (relatorio.arquivos ?? []).map(async ({ name, size, type, path: storagePath }) => {
+      let url = null
+      if (storagePath) {
+        try { url = await getAnexoUrl(storagePath) } catch {}
+      }
+      return { name, size, type, url }
+    })
+  )
+
+  const payload = {
+    id:          relatorio.id,
+    titulo:      relatorio.titulo,
+    responsavel: relatorio.responsavel,
+    responsavelEmail: relatorio.responsavelEmail ?? null,
+    semana:      relatorio.semana,
+    conteudo:    relatorio.conteudo,
+    criadoEm:    relatorio.criadoEm ?? relatorio.created_at,
+    arquivos,
+  }
+
+  try {
+    await fetch(webhookPath, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // webhook é fire-and-forget; falha não bloqueia o salvamento
+  }
 }
 // ── Metricas (Fase 4) ─────────────────────────────────────
 export async function loadMetricas() {

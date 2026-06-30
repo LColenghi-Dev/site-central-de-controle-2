@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom'
 import {
   Plus, X, FileText, Calendar, ChevronDown, ChevronUp,
   Search, Upload, File, FileImage, Paperclip, ChevronRight, Download,
+  ChevronLeft,
 } from 'lucide-react'
-import { loadRelatorios, createRelatorio, deleteRelatorio, loadUsuarios, getAnexoUrl } from '../../lib/api'
+import { loadRelatorios, createRelatorio, deleteRelatorio, loadUsuarios, getAnexoUrl, notifyWebhookRelatorio } from '../../lib/api'
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024 // 3 MB por arquivo
 
@@ -15,6 +16,57 @@ function initials(name) {
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
+function todayInputValue() {
+  return new Date().toISOString().slice(0, 10)
+}
+function parseInputDate(value) {
+  if (!value) return null
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+function startOfWeek(date) {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  d.setDate(d.getDate() + diff)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+function endOfWeek(date) {
+  const d = startOfWeek(date)
+  d.setDate(d.getDate() + 6)
+  return d
+}
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+}
+function sameWeek(a, b) {
+  return sameDay(startOfWeek(a), startOfWeek(b))
+}
+function sameMonth(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
+}
+function formatPeriod(tipo, value) {
+  const date = parseInputDate(value)
+  if (!date) return ''
+  if (tipo === 'dia') return date.toLocaleDateString('pt-BR')
+  if (tipo === 'mes') return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  const start = startOfWeek(date)
+  const end = endOfWeek(date)
+  return `${start.toLocaleDateString('pt-BR')} - ${end.toLocaleDateString('pt-BR')}`
+}
+function addPeriod(value, tipo, amount) {
+  const date = parseInputDate(value) ?? new Date()
+  if (tipo === 'mes') date.setMonth(date.getMonth() + amount)
+  else if (tipo === 'semana') date.setDate(date.getDate() + amount * 7)
+  else date.setDate(date.getDate() + amount)
+  return date.toISOString().slice(0, 10)
+}
+function periodLabel(tipo, value) {
+  return formatPeriod(tipo, value) || 'Selecionar data'
+}
 function fmtSize(bytes) {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
@@ -23,6 +75,38 @@ function fmtSize(bytes) {
 function fileIcon(type) {
   if (type.startsWith('image/')) return FileImage
   return File
+}
+
+function DateStepper({ tipo = 'dia', value, onChange, className = '' }) {
+  return (
+    <div className={`rd-date-stepper${className ? ` ${className}` : ''}`}>
+      <button
+        type="button"
+        className="rd-date-stepper__nav"
+        onClick={() => onChange(addPeriod(value, tipo, -1))}
+        aria-label="Data anterior"
+      >
+        <ChevronLeft size={15} />
+      </button>
+      <button
+        type="button"
+        className="rd-date-stepper__value"
+        onClick={() => onChange(todayInputValue())}
+        title="Usar hoje"
+      >
+        <Calendar size={14} />
+        <span>{periodLabel(tipo, value)}</span>
+      </button>
+      <button
+        type="button"
+        className="rd-date-stepper__nav"
+        onClick={() => onChange(addPeriod(value, tipo, 1))}
+        aria-label="Próxima data"
+      >
+        <ChevronRight size={15} />
+      </button>
+    </div>
+  )
 }
 
 /* ── Área de upload ─────────────────────────────────────── */
@@ -111,8 +195,10 @@ function UploadArea({ arquivos, onChange }) {
 function NovoRelatorioModal({ onClose, onSave }) {
   const [usuarios, setUsuarios] = useState([])
   const [saving,   setSaving]   = useState(false)
+  const [periodoTipo, setPeriodoTipo] = useState('semana')
+  const [periodoData, setPeriodoData] = useState(todayInputValue())
   const [form, setForm] = useState({
-    titulo: '', responsavel: '', semana: '', conteudo: '', arquivos: [],
+    titulo: '', responsavel: '', semana: formatPeriod('semana', todayInputValue()), conteudo: '', arquivos: [],
   })
   const [errors, setErrors] = useState({})
 
@@ -121,6 +207,22 @@ function NovoRelatorioModal({ onClose, onSave }) {
   function set(field, value) {
     setForm(f => ({ ...f, [field]: value }))
     setErrors(e => ({ ...e, [field]: '' }))
+  }
+
+  function setResponsavel(nome) {
+    const usuario = usuarios.find(u => u.nome === nome)
+    setForm(f => ({
+      ...f,
+      responsavel: nome,
+      responsavelEmail: usuario?.email ?? '',
+    }))
+    setErrors(e => ({ ...e, responsavel: '' }))
+  }
+
+  function setPeriodo(tipo, data = periodoData) {
+    setPeriodoTipo(tipo)
+    setPeriodoData(data)
+    set('semana', formatPeriod(tipo, data))
   }
 
   function validate() {
@@ -181,7 +283,7 @@ function NovoRelatorioModal({ onClose, onSave }) {
                 <select
                   className={`rd-select${errors.responsavel ? ' rd-input--error' : ''}`}
                   value={form.responsavel}
-                  onChange={e => set('responsavel', e.target.value)}
+                  onChange={e => setResponsavel(e.target.value)}
                 >
                   <option value="">Selecionar responsável...</option>
                   {usuarios.map(u => (
@@ -195,16 +297,29 @@ function NovoRelatorioModal({ onClose, onSave }) {
           </div>
 
           <div className="rd-field">
-            <label className="rd-label">Período / Semana</label>
-            <div className="rd-input-wrap">
-              <Calendar size={14} className="rd-input-icon" />
-              <input
-                className={`rd-input rd-input--icon${errors.semana ? ' rd-input--error' : ''}`}
-                placeholder="Ex: 09/06 – 15/06/2025"
-                value={form.semana}
-                onChange={e => set('semana', e.target.value)}
-              />
+            <label className="rd-label">Data do relatório</label>
+            <div className="rd-date-mode" role="group" aria-label="Tipo de período">
+              {[
+                ['dia', 'Dia'],
+                ['semana', 'Semana'],
+                ['mes', 'Mês'],
+              ].map(([tipo, label]) => (
+                <button
+                  key={tipo}
+                  type="button"
+                  className={`rd-date-mode__btn${periodoTipo === tipo ? ' rd-date-mode__btn--active' : ''}`}
+                  onClick={() => setPeriodo(tipo)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
+            <DateStepper
+              tipo={periodoTipo}
+              value={periodoData}
+              onChange={value => setPeriodo(periodoTipo, value)}
+              className={errors.semana ? 'rd-date-stepper--error' : ''}
+            />
             {errors.semana && <span className="rd-error">{errors.semana}</span>}
           </div>
 
@@ -359,6 +474,8 @@ export default function RelatoriosDemandas() {
   const [showModal,  setShowModal]  = useState(false)
   const [filtro,     setFiltro]     = useState('todos')
   const [busca,      setBusca]      = useState('')
+  const [filtroDataTipo, setFiltroDataTipo] = useState('todos')
+  const [filtroData, setFiltroData] = useState(todayInputValue())
 
   useEffect(() => {
     loadRelatorios().then(setRelatorios)
@@ -368,6 +485,10 @@ export default function RelatoriosDemandas() {
     const saved = await createRelatorio(novo)
     setRelatorios(prev => [saved, ...prev])
     setShowModal(false)
+    notifyWebhookRelatorio({
+      ...saved,
+      responsavelEmail: novo.responsavelEmail,
+    })
   }
 
   async function handleDelete(id) {
@@ -379,11 +500,17 @@ export default function RelatoriosDemandas() {
 
   const filtrados = relatorios.filter(r => {
     const matchFiltro = filtro === 'todos' || r.responsavel === filtro
+    const criadoEm = new Date(r.criadoEm)
+    const dataBase = parseInputDate(filtroData)
+    const matchData = filtroDataTipo === 'todos' || !dataBase ||
+      (filtroDataTipo === 'dia' && sameDay(criadoEm, dataBase)) ||
+      (filtroDataTipo === 'semana' && sameWeek(criadoEm, dataBase)) ||
+      (filtroDataTipo === 'mes' && sameMonth(criadoEm, dataBase))
     const matchBusca  = busca === '' ||
       r.titulo.toLowerCase().includes(busca.toLowerCase()) ||
       r.responsavel.toLowerCase().includes(busca.toLowerCase()) ||
       r.conteudo.toLowerCase().includes(busca.toLowerCase())
-    return matchFiltro && matchBusca
+    return matchFiltro && matchData && matchBusca
   })
 
   return (
@@ -415,6 +542,33 @@ export default function RelatoriosDemandas() {
             value={busca}
             onChange={e => setBusca(e.target.value)}
           />
+        </div>
+        <div className="rd-date-filter">
+          <div className="rd-date-mode" role="group" aria-label="Filtrar por data">
+            {[
+              ['todos', 'Todos'],
+              ['dia', 'Dia'],
+              ['semana', 'Semana'],
+              ['mes', 'Mês'],
+            ].map(([tipo, label]) => (
+              <button
+                key={tipo}
+                type="button"
+                className={`rd-date-mode__btn${filtroDataTipo === tipo ? ' rd-date-mode__btn--active' : ''}`}
+                onClick={() => setFiltroDataTipo(tipo)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {filtroDataTipo !== 'todos' && (
+            <DateStepper
+              tipo={filtroDataTipo}
+              value={filtroData}
+              onChange={setFiltroData}
+              className="rd-date-filter__stepper"
+            />
+          )}
         </div>
         <div className="rd-filter-tabs">
           {responsaveis.map(resp => (

@@ -4233,30 +4233,55 @@ body::after {
   color: var(--text-muted);
 }
 
-.tp-date-field svg {
-  position: absolute;
-  left: 12px;
-  bottom: 11px;
-  color: var(--text-muted);
-  pointer-events: none;
-}
-
-.tp-date-field input {
+.tp-date-stepper {
   min-height: 40px;
-  width: 154px;
-  padding: 0 12px 0 34px;
+  display: grid;
+  grid-template-columns: 34px minmax(122px, 1fr) 34px;
+  align-items: stretch;
+  overflow: hidden;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: rgba(255,255,255,0.04);
-  color: var(--text-primary);
-  font-family: 'Urbanist', sans-serif;
-  font-size: 13px;
-  outline: none;
 }
 
-.tp-date-field input:focus {
-  border-color: rgba(34,211,238,0.42);
-  box-shadow: 0 0 0 3px rgba(34,211,238,0.08);
+.tp-date-stepper button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+  transition: background 0.18s, color 0.18s;
+}
+
+.tp-date-stepper button:last-child {
+  border-right: 0;
+  border-left: 1px solid var(--border);
+}
+
+.tp-date-stepper button:hover:not(:disabled) {
+  color: var(--accent);
+  background: rgba(34,211,238,0.08);
+}
+
+.tp-date-stepper button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.tp-date-stepper__value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tp-date-stepper__value svg {
+  color: var(--accent);
 }
 
 .tp-date-apply,
@@ -4924,6 +4949,113 @@ body::after {
 .rd-search:focus {
   border-color: rgba(34,211,238,0.40);
   background: rgba(34,211,238,0.03);
+}
+
+.rd-date-control,
+.rd-date-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rd-date-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.rd-date-mode__btn {
+  height: 30px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: calc(var(--r-md) - 3px);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: 'Urbanist', sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+
+.rd-date-mode__btn:hover {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.06);
+}
+
+.rd-date-mode__btn--active {
+  color: var(--accent);
+  background: rgba(34,211,238,0.12);
+}
+
+.rd-date-stepper {
+  min-height: 46px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.03));
+}
+
+.rd-date-stepper--error {
+  border-color: rgba(248,113,113,0.50);
+}
+
+.rd-date-stepper__nav,
+.rd-date-stepper__value {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rd-date-stepper__nav {
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+  transition: background 0.18s, color 0.18s;
+}
+
+.rd-date-stepper__nav:last-child {
+  border-right: 0;
+  border-left: 1px solid var(--border);
+}
+
+.rd-date-stepper__nav:hover {
+  color: var(--accent);
+  background: rgba(34,211,238,0.08);
+}
+
+.rd-date-stepper__value {
+  gap: 9px;
+  padding: 0 12px;
+  color: var(--text-primary);
+  font-family: 'Urbanist', sans-serif;
+  font-size: 13.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.rd-date-stepper__value svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.rd-date-stepper__value span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rd-date-filter__stepper {
+  width: min(360px, 100%);
 }
 
 .rd-filter-tabs {
