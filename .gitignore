@@ -6,7 +6,8 @@ dist-ssr
 .env.local
 .DS_Store
 Thumbs.db
-docs/
+docs/plans
+docs/relatorios-diarios
 # Automações n8n — não faz parte do site
 automacoes-n8n/
 outputs/

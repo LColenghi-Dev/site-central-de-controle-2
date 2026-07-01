@@ -57,6 +57,8 @@ const WEEK_DATA = [
 ]
 
 const PROJ_SUMMARY = { andamento: 8, revisao: 2, concluidos: 14 }
+const PROJ_TOTAL = PROJ_SUMMARY.andamento + PROJ_SUMMARY.revisao + PROJ_SUMMARY.concluidos
+const PROJ_DONE_RATE = PROJ_TOTAL ? (PROJ_SUMMARY.concluidos / PROJ_TOTAL) * 100 : 0
 
 /* ── n8n ──────────────────────────────────────────────────── */
 const N8N_API = '/n8n-api'
@@ -75,6 +77,14 @@ function timeAgo(iso) {
 function fmtCount(n) {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
   return n.toString()
+}
+
+function getAutomationHealth(data) {
+  if (!data) return { label: 'Sem dados', tone: 'muted' }
+  if (!data.execucoesAmostra) return { label: 'Sem dados', tone: 'muted' }
+  if (data.uptimeNum >= 95) return { label: 'Estável', tone: 'green' }
+  if (data.uptimeNum >= 80) return { label: 'Atenção', tone: 'amber' }
+  return { label: 'Crítico', tone: 'red' }
 }
 
 function getN8nList(payload) {
@@ -163,7 +173,16 @@ export default function VisaoGeral() {
           .filter(Boolean)
           .sort((a, b) => new Date(b) - new Date(a))[0] ?? null
 
-        setAutoData({ ativos, execucoesHoje, uptime, uptimeNum, ultimaExec })
+        setAutoData({
+          ativos,
+          total: workflows.length,
+          inativos: workflows.length - ativos,
+          execucoesHoje,
+          execucoesAmostra: executions.length,
+          uptime,
+          uptimeNum,
+          ultimaExec,
+        })
       } catch {
         /* falha silenciosa — widget mantém último estado */
       } finally {
@@ -239,82 +258,95 @@ export default function VisaoGeral() {
         <div className="vg-widgets">
 
           {/* Projetos widget */}
-          <div className="vg-widget dash-card">
-            <div className="vg-widget__head">
-              <Layers size={15} className="vg-widget__icon" />
-              <span className="vg-widget__title">Projetos</span>
-            </div>
-            <div className="vg-widget__rows">
-              <div className="vg-widget__row">
-                <span className="vg-status-dot vg-status--cyan" />
-                <span className="vg-widget__row-label">Em andamento</span>
-                <span className="vg-widget__row-val">{PROJ_SUMMARY.andamento}</span>
+          <div className="vg-summary-card vg-summary-card--projects dash-card">
+            <div className="vg-summary-card__body">
+              <div className="vg-summary-card__primary">
+                <div className="vg-summary-card__title-wrap">
+                  <div className="vg-summary-card__icon">
+                    <Layers size={16} />
+                  </div>
+                  <div>
+                    <p className="vg-summary-card__eyebrow">Projetos</p>
+                  <h3 className="vg-summary-card__title">STATUS DOS PROJETOS</h3>
+                  </div>
+                </div>
+                <p className="vg-summary-card__value">{PROJ_TOTAL}</p>
+                <span className="vg-summary-card__label">Projetos no mês</span>
               </div>
-              <div className="vg-widget__row">
-                <span className="vg-status-dot vg-status--amber" />
-                <span className="vg-widget__row-label">Em revisão</span>
-                <span className="vg-widget__row-val">{PROJ_SUMMARY.revisao}</span>
-              </div>
-              <div className="vg-widget__row">
-                <span className="vg-status-dot vg-status--green" />
-                <span className="vg-widget__row-label">Concluídos</span>
-                <span className="vg-widget__row-val">{PROJ_SUMMARY.concluidos}</span>
+
+              <div className="vg-summary-card__side">
+                <span className="vg-summary-card__status vg-summary-card__status--green">
+                  <span className="vg-summary-card__status-dot" />
+                  Em dia
+                </span>
+                <div className="vg-summary-card__track" aria-hidden="true">
+                  <span style={{ '--w': `${PROJ_DONE_RATE}%` }} />
+                </div>
+                <div className="vg-summary-card__side-grid">
+                  <div className="vg-summary-card__metric">
+                    <p>{PROJ_SUMMARY.andamento}</p>
+                    <span>Em andamento</span>
+                  </div>
+                  <div className="vg-summary-card__metric">
+                    <p>{PROJ_SUMMARY.concluidos}</p>
+                    <span>Concluídos</span>
+                  </div>
+                </div>
+                <p className="vg-summary-card__foot">
+                  <CheckCheck size={12} />
+                  {PROJ_SUMMARY.revisao} em revisão · {PROJ_DONE_RATE.toFixed(0)}% concluídos
+                </p>
               </div>
             </div>
-            <div className="vg-widget__progress-bar">
-              <div
-                className="vg-widget__progress-fill"
-                style={{ '--w': `${(PROJ_SUMMARY.concluidos / (PROJ_SUMMARY.andamento + PROJ_SUMMARY.revisao + PROJ_SUMMARY.concluidos)) * 100}%` }}
-              />
-            </div>
-            <p className="vg-widget__foot">
-              <CheckCheck size={12} /> {PROJ_SUMMARY.concluidos} entregas no mês
-            </p>
           </div>
 
           {/* Automações n8n widget — dados reais */}
-          <div className="vg-widget dash-card">
-            <div className="vg-widget__head">
-              <Cpu size={15} className="vg-widget__icon" />
-              <span className="vg-widget__title">Automações n8n</span>
-            </div>
-            <div className="vg-widget__rows">
-              <div className="vg-widget__row">
-                <span className="vg-status-dot vg-status--green vg-status--pulse" />
-                <span className="vg-widget__row-label">Flows ativos</span>
-                <span className="vg-widget__row-val">
+          <div className="vg-summary-card vg-summary-card--automation dash-card">
+            <div className="vg-summary-card__body">
+              <div className="vg-summary-card__primary">
+                <div className="vg-summary-card__title-wrap">
+                  <div className="vg-summary-card__icon">
+                    <Cpu size={16} />
+                  </div>
+                  <div>
+                    <p className="vg-summary-card__eyebrow">Automações n8n</p>
+                  <h3 className="vg-summary-card__title">STATUS DOS FLUXOS</h3>
+                  </div>
+                </div>
+                <p className="vg-summary-card__value">
                   {autoLoading ? '…' : (autoData?.ativos ?? '—')}
-                </span>
+                </p>
+                <span className="vg-summary-card__label">Fluxos ativos</span>
               </div>
-              <div className="vg-widget__row">
-                <span className="vg-status-dot vg-status--cyan" />
-                <span className="vg-widget__row-label">Execuções hoje</span>
-                <span className="vg-widget__row-val">
-                  {autoLoading ? '…' : (autoData ? fmtCount(autoData.execucoesHoje) : '—')}
+
+              <div className="vg-summary-card__side">
+                <span className={`vg-summary-card__status vg-summary-card__status--${getAutomationHealth(autoData).tone}`}>
+                  <span className="vg-summary-card__status-dot" />
+                  {autoLoading ? 'Conectando' : getAutomationHealth(autoData).label}
                 </span>
-              </div>
-              <div className="vg-widget__row">
-                <span className="vg-status-dot vg-status--violet" />
-                <span className="vg-widget__row-label">Uptime</span>
-                <span className="vg-widget__row-val">
-                  {autoLoading ? '…' : (autoData?.uptime ?? '—')}
-                </span>
+                <div className="vg-summary-card__track vg-summary-card__track--green" aria-hidden="true">
+                  <span style={{ '--w': autoData ? `${autoData.uptimeNum}%` : '0%' }} />
+                </div>
+                <div className="vg-summary-card__side-grid">
+                  <div className="vg-summary-card__metric">
+                    <p>{autoLoading ? '…' : (autoData ? fmtCount(autoData.execucoesHoje) : '—')}</p>
+                    <span>Execuções hoje</span>
+                  </div>
+                  <div className="vg-summary-card__metric">
+                    <p>{autoLoading ? '…' : (autoData?.uptime ?? '—')}</p>
+                    <span>Uptime</span>
+                  </div>
+                </div>
+                <p className="vg-summary-card__foot">
+                  <Clock size={12} />
+                  {autoLoading
+                    ? 'Atualizando automações'
+                    : autoData?.ultimaExec
+                      ? `${autoData?.inativos ?? 0} inativos · última execução ${timeAgo(autoData.ultimaExec)}`
+                      : 'Sem execuções recentes'}
+                </p>
               </div>
             </div>
-            <div className="vg-widget__progress-bar">
-              <div
-                className="vg-widget__progress-fill vg-widget__progress-fill--green"
-                style={{ '--w': autoData ? `${autoData.uptimeNum}%` : '0%' }}
-              />
-            </div>
-            <p className="vg-widget__foot">
-              <Clock size={12} />
-              {autoLoading
-                ? 'Conectando…'
-                : autoData?.ultimaExec
-                  ? `Última exec. ${timeAgo(autoData.ultimaExec)}`
-                  : 'Nenhuma execução encontrada'}
-            </p>
           </div>
 
         </div>

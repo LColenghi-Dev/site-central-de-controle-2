@@ -217,7 +217,11 @@ export default function Automacoes() {
               </div>
               <div>
                 <p className="cc-n8n-hero__name">n8n Workflow Editor</p>
-                <div className="cc-n8n-hero__conn">
+                <div
+                  className={`cc-n8n-hero__conn ${
+                    loading ? 'cc-n8n-hero__conn--loading' : error ? 'cc-n8n-hero__conn--error' : 'cc-n8n-hero__conn--online'
+                  }`}
+                >
                   <span className="cc-n8n-conn-dot" />
                   {loading ? 'Conectando…' : error ? 'Erro de conexão' : 'Conectado'}
                 </div>

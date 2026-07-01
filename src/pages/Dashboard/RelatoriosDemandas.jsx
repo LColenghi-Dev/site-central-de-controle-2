@@ -48,11 +48,14 @@ function sameWeek(a, b) {
 function sameMonth(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
 }
+function capitalizeFirst(value) {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value
+}
 function formatPeriod(tipo, value) {
   const date = parseInputDate(value)
   if (!date) return ''
   if (tipo === 'dia') return date.toLocaleDateString('pt-BR')
-  if (tipo === 'mes') return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  if (tipo === 'mes') return capitalizeFirst(date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }))
   const start = startOfWeek(date)
   const end = endOfWeek(date)
   return `${start.toLocaleDateString('pt-BR')} - ${end.toLocaleDateString('pt-BR')}`

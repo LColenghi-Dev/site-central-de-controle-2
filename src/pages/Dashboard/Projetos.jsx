@@ -144,7 +144,14 @@ function CardProdutividade() {
         </button>
       </div>
 
-      <div className="prod-person-tabs" role="tablist" aria-label="Profissionais">
+      <div className="prod-cockpit">
+        <div className="prod-cockpit__rail">
+          <div className="prod-cockpit__rail-head">
+            <span className="prod-cockpit__rail-label">Equipe</span>
+            <strong>{person?.nome ?? PEOPLE.find(p => p.key === activePerson)?.nome}</strong>
+            <small>{person?.funcao ?? PEOPLE.find(p => p.key === activePerson)?.funcao}</small>
+          </div>
+          <div className="prod-person-tabs" role="tablist" aria-label="Profissionais">
         {PEOPLE.map(item => (
           <button
             type="button"
@@ -161,7 +168,14 @@ function CardProdutividade() {
             </span>
           </button>
         ))}
-      </div>
+          </div>
+        </div>
+
+        <div className="prod-cockpit__main">
+          <div className="prod-cockpit__section-head">
+            <span>Resumo operacional</span>
+            <strong>{activePerson === 'bruno' ? 'Agendamentos' : 'Tarefas em fluxo'}</strong>
+          </div>
 
       {error ? (
         <div className="prod-error" role="alert">
@@ -233,6 +247,8 @@ function CardProdutividade() {
           </button>
         </div>
       )}
+        </div>
+      </div>
 
       <details className="prod-source-details">
         <summary><Info size={13} /> Origem dos dados</summary>
@@ -310,7 +326,7 @@ function CardProdutividade() {
 
 export default function Projetos() {
   return (
-    <div className="cc">
+    <div className="cc proj-page">
       <div className="cc-header">
         <div>
           <p className="cc-eyebrow">Gestão de Projetos</p>
