@@ -126,10 +126,10 @@ export async function uploadAnexo(file, relatorioId) {
   return { name: file.name, size: file.size, type: file.type, path: data.path }
 }
 
-export async function getAnexoUrl(path) {
+export async function getAnexoUrl(path, downloadName) {
   const { data, error } = await supabase.storage
     .from('relatorios')
-    .createSignedUrl(path, 3600)
+    .createSignedUrl(path, 3600, downloadName ? { download: downloadName } : undefined)
   if (error) throw error
   return data.signedUrl
 }
@@ -141,7 +141,7 @@ export async function notifyWebhookRelatorio(relatorio) {
     (relatorio.arquivos ?? []).map(async ({ name, size, type, path: storagePath }) => {
       let url = null
       if (storagePath) {
-        try { url = await getAnexoUrl(storagePath) } catch {}
+        try { url = await getAnexoUrl(storagePath, name) } catch {}
       }
       return { name, size, type, url }
     })
