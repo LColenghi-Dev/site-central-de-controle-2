@@ -135,9 +135,7 @@ export async function getAnexoUrl(path) {
 }
 
 export async function notifyWebhookRelatorio(relatorio) {
-  const webhookPath = import.meta.env.DEV
-    ? '/n8n-api/webhook-test/relatorio-interno'
-    : '/n8n-api/webhook/relatorio-interno'
+  const webhookPath = '/n8n-api/webhook/relatorio-interno'
 
   const arquivos = await Promise.all(
     (relatorio.arquivos ?? []).map(async ({ name, size, type, path: storagePath }) => {
@@ -160,14 +158,15 @@ export async function notifyWebhookRelatorio(relatorio) {
     arquivos,
   }
 
-  try {
-    await fetch(webhookPath, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-  } catch {
-    // webhook é fire-and-forget; falha não bloqueia o salvamento
+  const response = await fetch(webhookPath, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => '')
+    throw new Error(`Webhook do relat�rio respondeu ${response.status}${message ? `: ${message.slice(0, 120)}` : ''}`)
   }
 }
 // ── Metricas (Fase 4) ─────────────────────────────────────

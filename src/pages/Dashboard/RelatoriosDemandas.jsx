@@ -488,10 +488,15 @@ export default function RelatoriosDemandas() {
     const saved = await createRelatorio(novo)
     setRelatorios(prev => [saved, ...prev])
     setShowModal(false)
-    notifyWebhookRelatorio({
-      ...saved,
-      responsavelEmail: novo.responsavelEmail,
-    })
+    try {
+      await notifyWebhookRelatorio({
+        ...saved,
+        responsavelEmail: novo.responsavelEmail,
+      })
+    } catch (error) {
+      console.error('[relatorios-demandas] falha ao enviar webhook', error)
+      alert('Relatório salvo, mas não foi possível enviar os dados para a automação n8n. Verifique o webhook publicado.')
+    }
   }
 
   async function handleDelete(id) {
